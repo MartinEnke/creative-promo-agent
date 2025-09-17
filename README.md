@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Creative Promo Agent
 
-## Getting Started
+An AI-powered promo kit generator for music releases. Paste a track link or type metadata, curate 1–3 reference images, and the app generates:
+- A tight **color palette** from your images
+- **Loglines**, a **120-word bio**, **two caption sets (A/B)**, and a **7‑day plan**
+- A **quality gate** (self-critique) that scores outputs and picks the better caption set
+- A styled **PDF export** (palette → moodboard → content → appendix)
 
-First, run the development server:
+## Stack
+- **Next.js 14** (App Router)
+- **OpenAI** `gpt-4o-mini` (compose + critique)
+- **Pexels** / **Unsplash** (image search)
+- **jsPDF** (export)
+- Tailwind-style utility classes
+
+## Quick start
 
 ```bash
+npm install
+cp .env.example .env.local
+# paste your real API keys into .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit **http://localhost:3000**, use **Try a demo** or fill the brief, curate images, then click **Execute Promo Agent**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create `.env.local` from `.env.example`:
 
-## Learn More
+```
+PEXELS_API_KEY=your_pexels_key_here
+UNSPLASH_ACCESS_KEY=           # optional
+OPENAI_API_KEY=your_openai_key_here
+```
 
-To learn more about Next.js, take a look at the following resources:
+> Never commit `.env.local`. The repo tracks `.env.example` for reference.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Useful npm scripts
+- `npm run dev` — start Next.js dev server
+- `npm run build` — production build
+- `npm start` — run production server (after build)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## API routes overview
+- `POST /api/ingest` — oEmbed metadata from a track link
+- `GET  /api/images` — image search proxy (Pexels/Unsplash)
+- `POST /api/compose` — AI composition (A/B captions + cache + telemetry)
+- `POST /api/critique` — AI quality gate (score, issues, suggestions, winner)
 
-## Deploy on Vercel
+## Deploy notes
+- Set env vars in your host (Vercel/Render/etc.).
+- Ensure API routes run on **Node runtime** (we export `runtime = 'nodejs'`).
+- Consider removing the dev-only `/api/debug-env` route before deployment.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Troubleshooting
+- **Missing API key**: ensure `.env.local` is at the project root and restart the dev server.
+- **Images return 400**: you likely don’t have Pexels/Unsplash keys loaded. Check `/api/debug-env` (dev only).
+- **Edge runtime env issues**: our API routes force Node, but double‑check you didn’t set `runtime = 'edge'` elsewhere.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+© 2025 Martin Enke. MIT License.
