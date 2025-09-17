@@ -132,7 +132,7 @@ export default function Page() {
   async function searchImages(query: string, orient: Orientation) {
     setImgLoading(true); setMsg(null);
     setSelected([]); setPalette([]); setExecuted(false); setAi(null); setCrit(null);
-    const url = '/api/images?count=12&orientation=' + orient + '&query=' + encodeURIComponent(query);
+    const url = '/api/images?count=15&orientation=' + orient + '&query=' + encodeURIComponent(query);
     const r = await fetch(url);
     const j = await r.json();
     if (j.error) {
@@ -161,30 +161,25 @@ export default function Page() {
     setAiLoading(true); setMsg(null); setAi(null); setCrit(null);
 
     try {
-      // Compose (A/B captions)
-      const t0 = performance.now();
+      // Compose (A/B)
       const rc = await fetch('/api/compose', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brief: workingBrief, palette, goal }),
       });
       const j = await rc.json();
       if (j.error) throw new Error(j.error);
-      const composeMs = performance.now() - t0;
-      setAi({ ...j, tookMs: j.tookMs ?? Math.round(composeMs) });
+      setAi(j);
 
-      // Critique + choose winner
-      setCritLoading(true);
-      const t1 = performance.now();
+      // Critique
       const rr = await fetch('/api/critique', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brief: workingBrief, goal, draft: j }),
       });
       const c = await rr.json();
-      const critMs = performance.now() - t1;
       if (c.error) throw new Error(c.error);
-      setCrit({ ...c, tookMs: c.tookMs ?? Math.round(critMs) });
+      setCrit(c);
 
-      // If low score, auto-refine once
+      // Auto-refine once if needed
       if ((c.score ?? 0) < 7 && c.suggestions?.length) {
         const r2 = await fetch('/api/compose', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -207,154 +202,198 @@ export default function Page() {
     exportAsPDF({ brief: workingBrief, selected, palette, ai, crit, goal });
   }
 
+  const genreChips = toList(genreStr);
+  const moodChips  = toList(moodStr);
+  const themeChips = toList(themesStr);
+
   return (
-    <div className="container py-8 space-y-6">
-      {/* Header */}
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Creative Promo Agent</h1>
-        <div className="flex gap-2">
-          <button className="btn-secondary" onClick={runDemo}>Try a demo</button>
-          <button className="btn-primary" onClick={exportPDF} disabled={!palette.length || !selected.length}>
-            Export PDF
-          </button>
+    <>
+      {/* Sticky header */}
+      <header className="site-header">
+        <div className="container header-row">
+          <div className="brand">
+            <div className="brand-dot" />
+            <span>Creative Promo Agent</span>
+          </div>
+          <div className="header-actions">
+            <button className="btn-secondary" onClick={runDemo}>Try demo</button>
+            <button className="btn-primary" onClick={exportPDF} disabled={!palette.length || !selected.length}>
+              Export PDF
+            </button>
+          </div>
         </div>
       </header>
 
-      <section className="grid md:grid-cols-3 gap-6">
-        {/* LEFT */}
-        <div className="md:col-span-1 space-y-4">
-          <div className="card space-y-3">
-            <h3 className="font-semibold">Brief</h3>
+      <main className="container page-grid">
+        {/* LEFT COLUMN */}
+        <section className="section">
+          <SectionHead step="1" title="Brief" subtitle="Track details and creative direction." />
 
-            {/* Goal preset */}
-            <div className="space-y-2">
-              <label className="label">Goal</label>
-              <select className="input !py-2 !h-auto" value={goal} onChange={e=>setGoal(e.target.value as Goal)}>
-                <option value="pre_save">Pre-save push</option>
-                <option value="press_kit">Press kit</option>
-                <option value="tiktok">TikTok launch</option>
-                <option value="playlist_pitch">Playlist pitch</option>
-              </select>
-            </div>
-
-            {/* Link helper */}
-            <div className="space-y-2">
-              <label className="label">Track link (YouTube/Spotify/SoundCloud)</label>
-              <input value={link} onChange={e=>setLink(e.target.value)} placeholder="https://…" className="input"/>
-              <div className="flex items-center gap-2">
-                <button className="btn-secondary" onClick={fetchFromLink} disabled={linkLoading || !link.trim()}>
-                  {linkLoading ? 'Fetching…' : 'OK'}
+          {/* Goal chips */}
+          <div className="group-block">
+            <div className="label">Goal</div>
+            <div className="chip-row">
+              {([
+                { id: 'pre_save', label: 'Pre-save' },
+                { id: 'press_kit', label: 'Press kit' },
+                { id: 'tiktok', label: 'TikTok' },
+                { id: 'playlist_pitch', label: 'Playlist pitch' },
+              ] as {id:Goal;label:string}[]).map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={()=>setGoal(opt.id)}
+                  className={cx('chip-toggle', goal===opt.id && 'chip-toggle--on')}
+                >
+                  {opt.label}
                 </button>
-                <p className="text-[11px] text-gray-500">We’ll auto-fill Title/Artist; you can edit.</p>
-              </div>
+              ))}
             </div>
-
-            {/* Metadata */}
-            <h4 className="font-medium pt-1">Track metadata</h4>
-            <div className="space-y-2">
-              <label className="label">Title</label>
-              <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Untitled"/>
-            </div>
-            <div className="space-y-2">
-              <label className="label">Artist</label>
-              <input className="input" value={artist} onChange={e=>setArtist(e.target.value)} placeholder="Your artist name"/>
-            </div>
-            <div className="space-y-2">
-              <label className="label">Genre (comma-separated)</label>
-              <input className="input" value={genreStr} onChange={e=>setGenreStr(e.target.value)} placeholder="e.g., synthwave, indie pop"/>
-            </div>
-
-            {/* Creative direction */}
-            <h4 className="font-medium pt-1">Creative direction</h4>
-            <div className="space-y-2">
-              <label className="label">Mood (comma-separated)</label>
-              <input className="input" value={moodStr} onChange={e=>setMoodStr(e.target.value)} placeholder="e.g., nocturnal, euphoric"/>
-            </div>
-            <div className="space-y-2">
-              <label className="label">Themes (comma-separated, visual)</label>
-              <input className="input" value={themesStr} onChange={e=>setThemesStr(e.target.value)} placeholder="e.g., neon city, rain, 2 AM streets"/>
-              <div className="flex items-center gap-2">
-                <select className="input !py-2 !h-auto w-40" value={orientation} onChange={e => setOrientation(e.target.value as Orientation)} title="Image orientation">
-                  <option value="auto">Orientation: Auto</option>
-                  <option value="landscape">Landscape</option>
-                  <option value="portrait">Portrait</option>
-                  <option value="square">Square</option>
-                </select>
-                <button className="btn-secondary flex-1" onClick={curateFromThemes} disabled={imgLoading}>
-                  {imgLoading ? 'Searching…' : 'Curate images'}
-                </button>
-              </div>
-              <p className="text-[11px] text-gray-500">Themes drive visuals (what to look for in images).</p>
-            </div>
-
-            {msg && <p className="text-xs text-red-500">{msg}</p>}
           </div>
 
-          <PaletteBlock palette={palette} />
-
-          {/* Run details */}
-          {(ai || crit) && (
-            <div className="card text-xs space-y-1">
-              <h4 className="font-semibold mb-1">Run details</h4>
-              {ai && (
-                <p>Compose: {ai.tookMs ?? '—'} ms · {ai.model} · tokens: {ai.usage?.total_tokens ?? '—'} {ai.cache ? '· cache' : ''}</p>
-              )}
-              {crit && (
-                <p>Critique: {crit.tookMs ?? '—'} ms · {crit.model} · tokens: {crit.usage?.total_tokens ?? '—'} · score: {crit.score ?? '—'}</p>
-              )}
+          {/* Link helper */}
+          <div className="group-block">
+            <div className="label">Track link</div>
+            <div className="row gap-8">
+              <input value={link} onChange={e=>setLink(e.target.value)} placeholder="YouTube / Spotify / SoundCloud URL" className="input input--md" />
+              <button className="btn-secondary" onClick={fetchFromLink} disabled={linkLoading || !link.trim()}>
+                {linkLoading ? 'Fetching…' : 'OK'}
+              </button>
             </div>
-          )}
-        </div>
+            <p className="hint">We’ll try to auto-fill Title/Artist. You can edit anytime.</p>
+          </div>
 
-        {/* RIGHT */}
-        <div className="md:col-span-2 space-y-4">
-          <div className="card">
-            {/* Tips + Selected + Execute */}
-            <div className="mb-3 space-y-1">
-              <p className="text-xs text-gray-600">
-                <strong>Pick 1–3 images</strong> for a clean, focused palette. Image attribution is included in the PDF.
-              </p>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-gray-500">Selected: {selected.length} (max 12). Click again to deselect.</p>
-                <button className="btn-primary" onClick={handleExecute} disabled={selected.length === 0 || !palette.length || aiLoading || critLoading}>
-                  {(aiLoading || critLoading) ? 'Generating…' : 'Execute Promo Agent'}
+          {/* Metadata */}
+          <div className="group-block">
+            <div className="label">Track metadata</div>
+            <div className="stack-8">
+              <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Title" />
+              <input className="input" value={artist} onChange={e=>setArtist(e.target.value)} placeholder="Artist" />
+            </div>
+          </div>
+
+          {/* Creative direction */}
+          <div className="group-block">
+            <div className="label">Creative direction</div>
+            <div className="stack-8">
+              <input className="input" value={genreStr} onChange={e=>setGenreStr(e.target.value)} placeholder="Genre (comma-separated)" />
+              <ChipPreview items={genreChips} />
+              <input className="input" value={moodStr}  onChange={e=>setMoodStr(e.target.value)}  placeholder="Mood (comma-separated)" />
+              <ChipPreview items={moodChips} />
+              <input className="input" value={themesStr} onChange={e=>setThemesStr(e.target.value)} placeholder="Themes (comma-separated, visual)" />
+              <ChipPreview items={themeChips} />
+            </div>
+          </div>
+
+          <hr className="hairline" />
+
+          {/* Curate controls */}
+          <SectionHead step="2" title="Curate images" subtitle="Themes drive visuals. Pick 1–3 for a focused palette." compact />
+          <div className="row wrap gap-8">
+            <div className="chip-row">
+              {(['auto','landscape','portrait','square'] as Orientation[]).map(o=>(
+                <button key={o} onClick={()=>setOrientation(o)} className={cx('chip-toggle', orientation===o && 'chip-toggle--on')}>
+                  {o}
                 </button>
-              </div>
+              ))}
             </div>
+            <button className="btn-secondary" onClick={curateFromThemes} disabled={imgLoading}>
+              {imgLoading ? 'Searching…' : 'Search images'}
+            </button>
+          </div>
 
-            {/* Fixed 3×4 grid */}
+          {msg && <p className="msg-error">{msg}</p>}
+
+          <hr className="hairline" />
+
+          {/* Palette */}
+          <SectionHead step="3" title="Palette" subtitle="Auto-extracted from your selected images." compact />
+          <PaletteBlock palette={palette} />
+        </section>
+
+        {/* RIGHT COLUMN */}
+        <section className="section">
+          <div className="section-toolbar">
+            <SectionHead step="4" title="Execute & content" subtitle="Generate and refine copy for your release." />
+            <div className="row gap-8">
+              <span className="badge">Selected: {selected.length}</span>
+              <button className="btn-primary"
+                onClick={handleExecute}
+                disabled={selected.length === 0 || !palette.length || aiLoading || critLoading}
+              >
+                {(aiLoading || critLoading) ? 'Generating…' : 'Execute Promo Agent'}
+              </button>
+            </div>
+          </div>
+
+          {/* Smaller image grid for overview */}
+          <div className="card">
             {images.length === 0 ? (
-              <p className="text-sm text-gray-500">Add themes and hit “Curate images” to see suggestions.</p>
+              <p className="text-sm text-muted">Add themes and click “Search images”.</p>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
-                {images.slice(0, 12).map((img, i) => (
-                  <button
-                    key={i}
-                    onClick={() => toggle(img)}
-                    className={cx('relative border rounded-xl overflow-hidden w-full pb-[75%]', selected.find((s) => s.url === img.url) && 'ring-2 ring-brand-500')}
-                    title={img.attribution}
-                  >
-                    <img src={img.thumb} alt="ref" className="absolute inset-0 w-full h-full object-cover" />
-                    <div className="absolute bottom-0 inset-x-0 text-[10px] bg-black/50 text-white p-1">{img.author}</div>
-                  </button>
-                ))}
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                {images.slice(0, 15).map((img, i) => {
+                  const isSel = !!selected.find(s => s.url === img.url);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => toggle(img)}
+                      className={cx('tile w-full pb-[66%]', isSel && 'selected')}
+                      title={img.attribution}
+                    >
+                      <img src={img.thumb} alt="ref" className="absolute inset-0 w-full h-full object-cover" />
+                      <div className="tile-cap">{img.author}</div>
+                    </button>
+                  );
+                })}
               </div>
             )}
+            <p className="hint mt-2">Tip: pick <b>1–3 images</b> for a clean palette.</p>
           </div>
 
-          {/* Content */}
+          {/* Content (smaller type) */}
           {executed && (palette.length > 0) && (
             <CopyPanel brief={workingBrief} ai={ai} crit={crit} />
           )}
-        </div>
-      </section>
+        </section>
+      </main>
 
-      <footer className="text-xs text-gray-500">{/* empty */}</footer>
+      {/* Footer */}
+      <footer className="site-footer">
+        <div className="container footer-row">
+          <span className="text-muted">© 2025 Creative Promo Agent</span>
+          <div className="footer-links">
+            <a href="#" className="text-muted">Docs</a>
+            <a href="#" className="text-muted">Changelog</a>
+            <a href="#" className="text-muted">Feedback</a>
+          </div>
+        </div>
+      </footer>
+    </>
+  );
+}
+
+/* ---------- Small presentational pieces ---------- */
+function SectionHead({ step, title, subtitle, compact=false }: { step: string; title: string; subtitle?: string; compact?: boolean }) {
+  return (
+    <div className={cx('section-head', compact && 'section-head--compact')}>
+      <span className="chip-step">{step}</span>
+      <div className="head-text">
+        <h3 className="section-title">{title}</h3>
+        {subtitle && <p className="section-subtitle">{subtitle}</p>}
+      </div>
+    </div>
+  );
+}
+function ChipPreview({ items }: { items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="chip-row">
+      {items.map((it,i)=> <span className="chip" key={i}>{it}</span>)}
     </div>
   );
 }
 
-/* ---------- Copy Panel (A/B + winner, critique badges) ---------- */
+/* ---------- Copy Panel (A/B + winner, smaller type) ---------- */
 function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | null; crit: Critique | null }) {
   const winner = crit?.captionsWinner ?? 'A';
   const captions = ai ? (winner === 'A' ? ai.captionsA : ai.captionsB) : writeCaptions(brief);
@@ -363,44 +402,50 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
   const plan = ai?.plan ?? useMemo(()=> weekPlan(brief), [brief]);
 
   return (
-    <div className="card grid md:grid-cols-2 gap-4">
-      <div className="space-y-2">
-        <h3 className="font-semibold">Content {crit ? <span className="text-xs text-green-600">• QA score {crit.score}/10</span> : null}</h3>
-        <h4 className="font-medium">Loglines {ai ? <span className="text-xs text-green-600">• AI</span> : <span className="text-xs text-gray-400">• fallback</span>}</h4>
-        <ul className="list-disc pl-5 text-sm space-y-1">{logs.map((l,i)=>(<li key={i}>{l}</li>))}</ul>
-
-        <h4 className="font-medium mt-4">120-word Bio {ai ? <span className="text-xs text-green-600">• AI</span> : <span className="text-xs text-gray-400">• fallback</span>}</h4>
-        <p className="text-sm leading-relaxed whitespace-pre-wrap">{bio}</p>
-      </div>
-      <div className="space-y-2">
-        <h4 className="font-medium">Captions (A/B)</h4>
-        {ai ? (
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className={cx('text-xs mb-1', crit?.captionsWinner==='A' ? 'text-green-600 font-medium' : 'text-gray-500')}>Set A {crit?.captionsWinner==='A' && '• Winner'}</div>
-              <ul className="list-disc pl-5 text-sm space-y-1">{ai.captionsA.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
-            </div>
-            <div>
-              <div className={cx('text-xs mb-1', crit?.captionsWinner==='B' ? 'text-green-600 font-medium' : 'text-gray-500')}>Set B {crit?.captionsWinner==='B' && '• Winner'}</div>
-              <ul className="list-disc pl-5 text-sm space-y-1">{ai.captionsB.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
-            </div>
+    <div className="card content-card">
+      <div className="grid md:grid-cols-2 gap-12">
+        <div className="space-y-10">
+          <div>
+            <h4 className="content-h">Loglines {ai ? <span className="badge">AI</span> : <span className="badge">Fallback</span>}</h4>
+            <ul className="content-list">{logs.map((l,i)=>(<li key={i}>{l}</li>))}</ul>
           </div>
-        ) : (
-          <ul className="list-disc pl-5 text-sm space-y-1">{captions.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
-        )}
-        {crit?.winnerReasons && <p className="text-xs text-gray-500 mt-1">Why: {crit.winnerReasons}</p>}
-
-        <h4 className="font-medium mt-4">7-Day Plan</h4>
-        <ul className="text-sm space-y-1">
-          {plan.map((d,i)=>(<li key={i}><span className="font-medium">{d.day}:</span> {d.idea} — <em className="text-gray-500">{d.hook}</em></li>))}
-        </ul>
-
-        {crit?.issues?.length ? (
-          <div className="mt-3 rounded-lg bg-yellow-50 border p-2 text-xs">
-            <div className="font-medium">Referee notes</div>
-            <ul className="list-disc pl-4">{crit.issues.map((i,idx)=>(<li key={idx}>{i}</li>))}</ul>
+          <div>
+            <h4 className="content-h">120-word Bio {ai ? <span className="badge">AI</span> : <span className="badge">Fallback</span>}</h4>
+            <p className="content-body">{bio}</p>
           </div>
-        ) : null}
+        </div>
+        <div className="space-y-10">
+          <div>
+            <h4 className="content-h">Captions (A/B)</h4>
+            {ai ? (
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <div className={cx('content-sub', crit?.captionsWinner==='A' && 'text-win')}>Set A {crit?.captionsWinner==='A' && '• Winner'}</div>
+                  <ul className="content-list">{ai.captionsA.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
+                </div>
+                <div>
+                  <div className={cx('content-sub', crit?.captionsWinner==='B' && 'text-win')}>Set B {crit?.captionsWinner==='B' && '• Winner'}</div>
+                  <ul className="content-list">{ai.captionsB.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
+                </div>
+              </div>
+            ) : (
+              <ul className="content-list">{captions.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
+            )}
+            {crit?.winnerReasons && <p className="hint mt-2">Why: {crit.winnerReasons}</p>}
+          </div>
+          <div>
+            <h4 className="content-h">7-Day Plan</h4>
+            <ul className="content-list">
+              {plan.map((d,i)=>(<li key={i}><span className="bold">{d.day}:</span> {d.idea} — <em className="muted">{d.hook}</em></li>))}
+            </ul>
+            {crit?.issues?.length ? (
+              <div className="qa-notes">
+                <div className="bold">Referee notes</div>
+                <ul>{crit.issues.map((x,i)=>(<li key={i}>{x}</li>))}</ul>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -409,15 +454,14 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
 /* ---------- Palette block ---------- */
 function PaletteBlock({ palette }: { palette: string[] }) {
   return (
-    <div className="card">
-      <h3 className="font-semibold mb-2">Color Palette</h3>
+    <div className="card palette-card">
       {palette.length === 0 ? (
-        <p className="text-sm text-gray-500">Select 1–3 images and we’ll extract a 5-color palette.</p>
+        <p className="text-sm text-muted">Select 1–3 images and we’ll extract a 5-color palette.</p>
       ) : (
-        <div className="grid grid-cols-5 gap-2">
+        <div className="swatch-row">
           {palette.map((hex,i)=>(
-            <div key={i} className="rounded-xl h-12 border border-black/5 relative" style={{ background: hex }}>
-              <span className="absolute bottom-1 left-1 text-[10px] bg-white/70 px-1 rounded">{hex}</span>
+            <div key={i} className="swatch" style={{ background: hex }}>
+              <span className="swatch-tag">{hex}</span>
             </div>
           ))}
         </div>
@@ -426,7 +470,7 @@ function PaletteBlock({ palette }: { palette: string[] }) {
   );
 }
 
-/* ---------- Palette extraction ---------- */
+/* ---------- Palette extraction & helpers (unchanged logic) ---------- */
 async function extractPalette(urls: string[], k = 5): Promise<string[]> {
   if (!urls.length) return [];
   const pixels: number[][] = [];
@@ -464,7 +508,7 @@ function kmeansColors(pixels: number[][], k: number): number[][] {
 function dist2(a:number[], b:number[]){ const dr=a[0]-b[0], dg=a[1]-b[1], db=a[2]-b[2]; return dr*dr+dg*dg+db*db; }
 function rgbToHex([r,g,b]: number[]){ return '#' + [r,g,b].map(x=> x.toString(16).padStart(2,'0')).join(''); }
 
-/* ---------- Color helpers ---------- */
+/* ---------- Color & contrast helpers ---------- */
 function roleColors(palette: string[]) {
   if (!palette.length) return { primary: '#5468ff', accent: '#ff4d6d', neutral: '#111827' };
   const withL = palette.map(hex => { const { h, s, l } = hexToHsl(hex); return { hex, h, s, l }; });
@@ -491,7 +535,7 @@ function hexToHsl(hex: string) {
 function hexToRgb(hex: string){ const v=parseInt(hex.slice(1),16); return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 }; }
 function hueDistance(a:number,b:number){ const d=Math.abs(a-b); return Math.min(d,1-d); }
 
-/* ---------- PDF export (no assets) ---------- */
+/* ---------- PDF export (unchanged from your latest) ---------- */
 function exportAsPDF({
   brief, selected, palette, ai, crit, goal
 }: {
@@ -527,7 +571,7 @@ function exportAsPDF({
     const addBullets=(arr:string[],max=arr.length)=>{ for(const it of arr.slice(0,max)){ const lines=(doc as any).splitTextToSize('• '+it,MAX) as string[];
       for(const l of lines){ ensure(LH); doc.text(l,M,y); y+=LH; } } y+=4; };
 
-    // Title + divider + meta
+    // Title
     // @ts-ignore
     doc.setTextColor(pr.r,pr.g,pr.b);
     doc.setFont('helvetica','bold'); doc.setFontSize(18);
@@ -549,7 +593,7 @@ function exportAsPDF({
 
     // Moodboard
     addH2('Moodboard');
-    const cols=4, iw=120, ih=80, ig=10;
+    const cols=4, iw=110, ih=72, ig=10;
     const picks = selected.slice(0,12);
     const rows = Math.ceil(picks.length/cols) || 1;
     const gridHeight = rows*ih + (rows-1)*ig;
@@ -588,7 +632,7 @@ function exportAsPDF({
       for (const d of plan){ const line=`${d.day}: ${d.idea} — ${d.hook}`; const lines=(doc as any).splitTextToSize(line,MAX) as string[];
         for (const l of lines){ ensure(LH); doc.text(l,M,y); y+=LH; } } y+=6;
 
-      // Appendix: inputs & QA
+      // Appendix
       doc.addPage(); y = M;
       addH2('Appendix: Inputs & QA');
       addParagraph(`Goal: ${goal}`);
