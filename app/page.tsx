@@ -329,7 +329,15 @@ export default function Page() {
             <div className="label">Track link</div>
             <div className="row gap-8">
               <input value={link} onChange={e=>setLink(e.target.value)} placeholder="YouTube / Spotify / SoundCloud URL" className="input input--md" />
-              <button className="btn-secondary" onClick={fetchFromLink} disabled={linkLoading || !link.trim()}>{linkLoading ? 'Fetching…' : 'OK'}</button>
+              <button
+  type="button"
+  className="btn-primary-soft btn-lg"
+  onClick={fetchFromLink}
+  disabled={linkLoading || !link.trim()}
+  aria-busy={linkLoading}
+>
+  {linkLoading ? 'Fetching…' : 'OK'}
+</button>
             </div>
             <p className="hint">We’ll try to auto-fill Title/Artist. You can edit anytime.</p>
           </div>
@@ -357,9 +365,11 @@ export default function Page() {
               {/* Moved here: Search Images */}
               <div className="row gap-8">
               <button
-  className="btn-primary-soft"
+  type="button"
+  className="btn-primary-soft btn-lg"
   onClick={curateFromThemes}
   disabled={imgLoading}
+  aria-busy={imgLoading}
 >
   {imgLoading ? 'Searching…' : 'Search Images'}
 </button>

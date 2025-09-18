@@ -194,3 +194,34 @@ textarea.input{ height: 110px; resize: vertical; }
 .btn-lg{ height: 44px; padding: 0 16px; border-radius: 14px; font-size: 14px; }
 .toolbar-glow.is-brief{ box-shadow: 0 0 0 1px color-mix(in oklab, var(--brand) 50%, transparent), 0 0 18px color-mix(in oklab, var(--brand) 22%, transparent); border-color: color-mix(in oklab, var(--brand) 45%, var(--hairline)); }
 .toolbar-glow.is-exec{ box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 50%, transparent), 0 0 18px color-mix(in oklab, var(--accent) 22%, transparent); border-color: color-mix(in oklab, var(--accent) 45%, var(--hairline)); }
+
+
+/* Base button (already in your cleaned CSS; include only if missing) */
+.btn {
+    height: 40px; padding: 0 14px; border-radius: 12px;
+    font-weight: 600; font-size: 13px; display: inline-flex;
+    align-items: center; justify-content: center; gap: 8px;
+    border: 1px solid transparent; cursor: pointer;
+    transition: transform .08s, box-shadow .2s, background .2s, border-color .2s, opacity .2s;
+  }
+  .btn:focus-visible { box-shadow: var(--ring); outline: none; }
+  
+  /* Subtle primary variant to match the app */
+  .btn-primary-soft {
+    composes: btn;
+    background: color-mix(in oklab, var(--brand) 18%, transparent);
+    border: 1px solid color-mix(in oklab, var(--brand) 45%, var(--hairline));
+    color: var(--ink);
+  }
+  .btn-primary-soft:hover {
+    background: color-mix(in oklab, var(--brand) 24%, transparent);
+  }
+  .btn-primary-soft:disabled {
+    opacity: .55; cursor: not-allowed;
+  }
+  
+  /* Larger size to give them more weight */
+  .btn-lg {
+    height: 44px; padding: 0 16px; border-radius: 14px; font-size: 14px;
+  }
+  
