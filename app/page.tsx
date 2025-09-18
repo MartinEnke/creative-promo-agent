@@ -1,12 +1,24 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useMemo, useState } from 'react';
+// ————————————————————————————————————————————
+// Creative Promo Agent — Prompt‑Only Cover Generator (no image API)
+// Adds a rich prompt composer you can copy/paste into any image LLM.
+// Keeps all your existing curation + palette + content features.
+// ————————————————————————————————————————————
+
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CreativeBrief, ImageRef, UserInput } from '@/lib/types';
 import { writeBio120, writeCaptions, writeLoglines, weekPlan } from '@/lib/ccopy';
 
 function cx(...c: (string | false | undefined)[]) { return c.filter(Boolean).join(' '); }
 function toList(s: string): string[] { return (s || '').split(/[|,/•·]+/).map(x => x.trim()).filter(Boolean); }
+
+// Intent clarifies purpose of image search for users
+type ImageIntent = 'palette' | 'cover';
+
+// Cover prompt options
+type StylePreset = 'graphic poster' | 'painterly' | 'cinematic photo' | '3D render' | 'neon collage' | 'ink & grain';
 
 type Orientation = 'auto' | 'landscape' | 'portrait' | 'square';
 type Goal = 'pre_save' | 'press_kit' | 'tiktok' | 'playlist_pitch';
@@ -49,6 +61,10 @@ export default function Page() {
   const [selected, setSelected] = useState<ImageRef[]>([]);
   const [palette, setPalette] = useState<string[]>([]);
 
+  // intent + orientation
+  const [imageIntent, setImageIntent] = useState<ImageIntent>('palette');
+  const [orientation, setOrientation] = useState<Orientation>('square');
+
   // --- UI state ---
   const [linkLoading, setLinkLoading] = useState(false);
   const [imgLoading, setImgLoading] = useState(false);
@@ -56,11 +72,17 @@ export default function Page() {
   const [critLoading, setCritLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [executed, setExecuted] = useState(false);
-  const [orientation, setOrientation] = useState<Orientation>('portrait');
 
   // --- AI content + critique ---
   const [ai, setAi] = useState<AIContent | null>(null);
   const [crit, setCrit] = useState<Critique | null>(null);
+
+  // --- Prompt Composer state ---
+  const [style, setStyle] = useState<StylePreset>('graphic poster');
+  const [focalSubject, setFocalSubject] = useState('strong central focal point');
+  const [refStrength, setRefStrength] = useState(60); // 0–100 (hint only)
+  const [prompt, setPrompt] = useState('');
+  const [copied, setCopied] = useState(false);
 
   // Theming from palette
   useEffect(() => {
@@ -81,6 +103,12 @@ export default function Page() {
     themes: toList(themesStr),
     colorHints: [],
   }), [title, artist, genreStr, moodStr, themesStr]);
+
+  // Auto-compose cover prompt whenever inputs change
+  useEffect(() => {
+    setPrompt(composeCoverPrompt({ brief: workingBrief, palette, selected, style, focalSubject, orientation, refStrength }));
+    setCopied(false);
+  }, [workingBrief, palette, selected, style, focalSubject, orientation, refStrength]);
 
   // Link → auto-fill
   async function fetchFromLink() {
@@ -129,10 +157,50 @@ export default function Page() {
     await searchImages(q, orientation);
   }
 
+  // ————————————————————————————————————————————
+  // Orientation-aware search + client-side filtering
+  // ————————————————————————————————————————————
+
+  const dimsCache = useRef(new Map<string, { w: number; h: number }>());
+
+  function getDims(img: ImageRef): Promise<{ w: number; h: number }>{
+    const key = img.thumb || img.url;
+    const cached = dimsCache.current.get(key);
+    if (cached) return Promise.resolve(cached);
+    return new Promise((resolve) => {
+      const el = new Image();
+      el.crossOrigin = 'anonymous';
+      el.onload = () => {
+        const dims = { w: el.naturalWidth || 1, h: el.naturalHeight || 1 };
+        dimsCache.current.set(key, dims);
+        resolve(dims);
+      };
+      el.onerror = () => resolve({ w: 1, h: 1 });
+      el.src = key;
+    });
+  }
+
+  function matchOrientation(w: number, h: number, orient: Orientation){
+    if (orient === 'auto') return true;
+    const ratio = w / h; // >1 landscape, <1 portrait
+    const TH = 0.12;     // tolerance band ~12%
+    if (orient === 'square') return Math.abs(ratio - 1) <= TH;
+    if (orient === 'portrait') return ratio <= (1 - TH);
+    if (orient === 'landscape') return ratio >= (1 + TH);
+    return true;
+  }
+
+  async function filterByOrientation(list: ImageRef[], orient: Orientation){
+    if (orient === 'auto') return list;
+    const pairs = await Promise.all(list.map(async (img) => ({ img, dims: await getDims(img) })));
+    const filtered = pairs.filter(({ dims }) => matchOrientation(dims.w, dims.h, orient)).map(p => p.img);
+    return filtered.length >= 6 ? filtered : list; // graceful fallback
+  }
+
   async function searchImages(query: string, orient: Orientation) {
     setImgLoading(true); setMsg(null);
     setSelected([]); setPalette([]); setExecuted(false); setAi(null); setCrit(null);
-    const url = '/api/images?count=15&orientation=' + orient + '&query=' + encodeURIComponent(query);
+    const url = '/api/images?count=20&orientation=' + orient + '&query=' + encodeURIComponent(query);
     const r = await fetch(url);
     const j = await r.json();
     if (j.error) {
@@ -141,7 +209,9 @@ export default function Page() {
     } else if (!j.images || j.images.length === 0) {
       setImages([]); setMsg('No images found for this query. Try simpler terms.');
     } else {
-      setImages(j.images);
+      const raw: ImageRef[] = j.images;
+      const filtered = await filterByOrientation(raw, orient);
+      setImages(filtered);
     }
     setImgLoading(false);
   }
@@ -161,7 +231,6 @@ export default function Page() {
     setAiLoading(true); setMsg(null); setAi(null); setCrit(null);
 
     try {
-      // Compose (A/B)
       const rc = await fetch('/api/compose', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brief: workingBrief, palette, goal }),
@@ -170,7 +239,6 @@ export default function Page() {
       if (j.error) throw new Error(j.error);
       setAi(j);
 
-      // Critique
       const rr = await fetch('/api/critique', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brief: workingBrief, goal, draft: j }),
@@ -179,7 +247,6 @@ export default function Page() {
       if (c.error) throw new Error(c.error);
       setCrit(c);
 
-      // Auto-refine once if needed
       if ((c.score ?? 0) < 7 && c.suggestions?.length) {
         const r2 = await fetch('/api/compose', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -198,17 +265,40 @@ export default function Page() {
     }
   }
 
-  function exportPDF() {
-    exportAsPDF({ brief: workingBrief, selected, palette, ai, crit, goal });
-  }
+  function exportPDF() { exportAsPDF({ brief: workingBrief, selected, palette, ai, crit, goal }); }
+
+
+  /* ---------- Palette block ---------- */
+function PaletteBlock({ palette }: { palette: string[] }) {
+  return (
+    <div className="card palette-card">
+      {palette.length === 0 ? (
+        <p className="text-sm text-muted">
+          Select 1–3 images and we’ll extract a 5-color palette.
+        </p>
+      ) : (
+        <div className="swatch-row">
+          {palette.map((hex, i) => (
+            <div key={i} className="swatch" style={{ background: hex }}>
+              <span className="swatch-tag">{hex}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
   const genreChips = toList(genreStr);
   const moodChips  = toList(moodStr);
   const themeChips = toList(themesStr);
 
+  // ————————————————————————————————————————————
+  // UI
+  // ————————————————————————————————————————————
   return (
     <>
-      {/* Sticky header */}
+      {/* Header */}
       <header className="site-header">
         <div className="container header-row">
           <div className="brand">
@@ -217,9 +307,7 @@ export default function Page() {
           </div>
           <div className="header-actions">
             <button className="btn-secondary" onClick={runDemo}>Try demo</button>
-            <button className="btn-primary" onClick={exportPDF} disabled={!palette.length || !selected.length}>
-              Export PDF
-            </button>
+            <button className="btn-primary btn-hero" onClick={exportPDF} disabled={!palette.length || !selected.length}>Export PDF</button>
           </div>
         </div>
       </header>
@@ -239,13 +327,7 @@ export default function Page() {
                 { id: 'tiktok', label: 'TikTok' },
                 { id: 'playlist_pitch', label: 'Playlist pitch' },
               ] as {id:Goal;label:string}[]).map(opt => (
-                <button
-                  key={opt.id}
-                  onClick={()=>setGoal(opt.id)}
-                  className={cx('chip-toggle', goal===opt.id && 'chip-toggle--on')}
-                >
-                  {opt.label}
-                </button>
+                <button key={opt.id} onClick={()=>setGoal(opt.id)} className={cx('chip-toggle chip-toggle--lg', goal===opt.id && 'chip-toggle--on')}>{opt.label}</button>
               ))}
             </div>
           </div>
@@ -255,9 +337,7 @@ export default function Page() {
             <div className="label">Track link</div>
             <div className="row gap-8">
               <input value={link} onChange={e=>setLink(e.target.value)} placeholder="YouTube / Spotify / SoundCloud URL" className="input input--md" />
-              <button className="btn-secondary" onClick={fetchFromLink} disabled={linkLoading || !link.trim()}>
-                {linkLoading ? 'Fetching…' : 'OK'}
-              </button>
+              <button className="btn-secondary" onClick={fetchFromLink} disabled={linkLoading || !link.trim()}>{linkLoading ? 'Fetching…' : 'OK'}</button>
             </div>
             <p className="hint">We’ll try to auto-fill Title/Artist. You can edit anytime.</p>
           </div>
@@ -288,17 +368,29 @@ export default function Page() {
 
           {/* Curate controls */}
           <SectionHead step="2" title="Curate images" subtitle="Themes drive visuals. Pick 1–3 for a focused palette." compact />
-          <div className="row wrap gap-8">
+
+          {/* Image intent */}
+          <div className="group-block">
+            <div className="label">Image intent</div>
             <div className="chip-row">
-              {(['auto','landscape','portrait','square'] as Orientation[]).map(o=>(
-                <button key={o} onClick={()=>setOrientation(o)} className={cx('chip-toggle', orientation===o && 'chip-toggle--on')}>
-                  {o}
+              {(['palette', 'cover'] as ImageIntent[]).map(int => (
+                <button key={int} onClick={()=>setImageIntent(int)} className={cx('chip-toggle', imageIntent===int && 'chip-toggle--on')}>
+                  {int === 'palette' ? 'Color palette' : 'Cover artwork (check license)'}
                 </button>
               ))}
             </div>
-            <button className="btn-secondary" onClick={curateFromThemes} disabled={imgLoading}>
-              {imgLoading ? 'Searching…' : 'Search images'}
-            </button>
+            {imageIntent==='cover' && (
+              <p className="hint">Inspiration only. Verify licensing before using an image as final artwork.</p>
+            )}
+          </div>
+
+          <div className="row wrap gap-8">
+            <div className="chip-row">
+              {(['auto','landscape','portrait','square'] as Orientation[]).map(o=> (
+                <button key={o} onClick={()=>setOrientation(o)} className={cx('chip-toggle', orientation===o && 'chip-toggle--on')}>{o}</button>
+              ))}
+            </div>
+            <button className="btn-secondary" onClick={curateFromThemes} disabled={imgLoading}>{imgLoading ? 'Searching…' : 'Search images'}</button>
           </div>
 
           {msg && <p className="msg-error">{msg}</p>}
@@ -316,31 +408,23 @@ export default function Page() {
             <SectionHead step="4" title="Execute & content" subtitle="Generate and refine copy for your release." />
             <div className="row gap-8">
               <span className="badge">Selected: {selected.length}</span>
-              <button className="btn-primary"
-                onClick={handleExecute}
-                disabled={selected.length === 0 || !palette.length || aiLoading || critLoading}
-              >
+              <button className="btn-primary btn-hero" onClick={handleExecute} disabled={selected.length === 0 || !palette.length || aiLoading || critLoading}>
                 {(aiLoading || critLoading) ? 'Generating…' : 'Execute Promo Agent'}
               </button>
             </div>
           </div>
 
-          {/* Smaller image grid for overview */}
+          {/* Image grid */}
           <div className="card">
             {images.length === 0 ? (
               <p className="text-sm text-muted">Add themes and click “Search images”.</p>
             ) : (
-              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-                {images.slice(0, 15).map((img, i) => {
+              <div className="image-grid" data-orient={orientation}>
+                {images.slice(0, 20).map((img, i) => {
                   const isSel = !!selected.find(s => s.url === img.url);
                   return (
-                    <button
-                      key={i}
-                      onClick={() => toggle(img)}
-                      className={cx('tile w-full pb-[66%]', isSel && 'selected')}
-                      title={img.attribution}
-                    >
-                      <img src={img.thumb} alt="ref" className="absolute inset-0 w-full h-full object-cover" />
+                    <button key={i} onClick={() => toggle(img)} className={cx('tile image-tile', isSel && 'selected')} title={img.attribution}>
+                      <img src={img.thumb} alt="ref" className="image-tile-img" />
                       <div className="tile-cap">{img.author}</div>
                     </button>
                   );
@@ -348,6 +432,34 @@ export default function Page() {
               </div>
             )}
             <p className="hint mt-2">Tip: pick <b>1–3 images</b> for a clean palette.</p>
+          </div>
+
+          {/* —— NEW: Prompt Composer —— */}
+          <div className="card">
+            <h4 className="content-h" style={{marginBottom:8}}>Cover prompt (copy & paste into your image model)</h4>
+            <div className="row wrap gap-8" style={{marginBottom:8}}>
+              <div className="chip-row">
+                {(['graphic poster','painterly','cinematic photo','3D render','neon collage','ink & grain'] as StylePreset[]).map(s => (
+                  <button key={s} className={cx('chip-toggle', style===s && 'chip-toggle--on')} onClick={()=>setStyle(s)}>{s}</button>
+                ))}
+              </div>
+            </div>
+            <div className="row wrap gap-8" style={{marginBottom:8}}>
+              <input className="input" placeholder="Focal subject (optional) — e.g., lone figure with umbrella, retro car, neon skyline" value={focalSubject} onChange={e=>setFocalSubject(e.target.value)} />
+            </div>
+            <div className="row wrap gap-8" style={{marginBottom:8}}>
+              <label className="label" style={{minWidth:120}}>Ref influence</label>
+              <input type="range" min={0} max={100} value={refStrength} onChange={e=>setRefStrength(parseInt(e.target.value))} />
+              <span className="hint">{refStrength}% — how strongly to lean on your selected refs (if the model supports it)</span>
+            </div>
+            <textarea className="input prompt-input" readOnly value={prompt} />
+            <div className="row gap-8" style={{justifyContent:'space-between', marginTop:8}}>
+              <span className="hint">Aspect: <b>Square (1:1)</b>. Paste this prompt into ChatGPT, Midjourney, etc.</span>
+              <div className="row gap-8">
+                <button className="btn-secondary" onClick={async()=>{ await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false), 1200); }}>{copied ? 'Copied ✓' : 'Copy prompt'}</button>
+                <a className="btn-secondary" href={`data:text/plain;charset=utf-8,${encodeURIComponent(prompt)}`} download={`${(workingBrief.title || 'cover').replace(/\s+/g,'_')}_prompt.txt`}>Download .txt</a>
+              </div>
+            </div>
           </div>
 
           {/* Content (smaller type) */}
@@ -451,23 +563,57 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
   );
 }
 
-/* ---------- Palette block ---------- */
-function PaletteBlock({ palette }: { palette: string[] }) {
-  return (
-    <div className="card palette-card">
-      {palette.length === 0 ? (
-        <p className="text-sm text-muted">Select 1–3 images and we’ll extract a 5-color palette.</p>
-      ) : (
-        <div className="swatch-row">
-          {palette.map((hex,i)=>(
-            <div key={i} className="swatch" style={{ background: hex }}>
-              <span className="swatch-tag">{hex}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+/* ---------- Prompt composer ---------- */
+function composeCoverPrompt({
+  brief,
+  palette,
+  selected,
+  style,
+  focalSubject,
+  orientation,
+  refStrength,
+}: {
+  brief: CreativeBrief;
+  palette: string[];
+  selected: ImageRef[];
+  style: StylePreset;
+  focalSubject: string;
+  orientation: Orientation;
+  refStrength: number;
+}) {
+  const title = brief.title || 'Untitled';
+  const artist = brief.artist || '—';
+  const genres = (brief.genre || []).join(', ');
+  const moods = (brief.mood || []).join(', ');
+  const themes = (brief.themes || []).join(', ');
+  const hexes = (palette || []).join(', ');
+  const authors = Array.from(new Set((selected || []).map(s => s.author).filter(Boolean))).slice(0, 4);
+  const refLine = authors.length ? `Reference vibe inspired by (${authors.join('; ')}), for palette/texture only — do NOT copy exact compositions or watermarks.` : '';
+  const ar = orientation === 'portrait' ? 'Portrait 4:5' : orientation === 'landscape' ? 'Landscape 3:2' : 'Square 1:1';
+
+  return [
+    // Task
+    `Design an **album cover artwork** — ${ar}. **No text, no logos, no watermarks.**`,
+    // Project context
+    `Project: ${artist} — ${title}.`,
+    genres && `Genre: ${genres}.`,
+    moods && `Mood: ${moods}.`,
+    themes && `Visual themes: ${themes}.`,
+    // Style
+    `Style: ${style}; richly lit, cohesive color grading, subtle film grain, streaming‑safe, poster‑like hierarchy with ample negative space for future typography.`,
+    // Focal + composition
+    focalSubject && `Focal subject: ${focalSubject}.`,
+    `Composition: clear central focus, depth with foreground/midground/background separation; avoid busy collage unless specified.`,
+    // Palette
+    hexes && `Color palette (hex, dominant first): ${hexes}. Use palette as primary grade, not just accents.`,
+    // Refs (conceptual)
+    refLine,
+    // Quality & constraints
+    `Quality: high detail, natural lighting/shadows, avoid plastic sheen or generic stock‑photo look.`,
+    `Negative: text, letters, numbers, watermark, signature, logos, QR codes, UI, captions, low‑res, extra limbs, deformed hands, cut‑off faces, bad anatomy.`,
+    // Model‑hint parameters (many models ignore this but it helps users copy to various tools)
+    `Parameters (if supported): aspect=1:1; guidance=7–10; reference_strength=${refStrength}%.`,
+  ].filter(Boolean).join('\n');
 }
 
 /* ---------- Palette extraction & helpers (unchanged logic) ---------- */
@@ -535,7 +681,7 @@ function hexToHsl(hex: string) {
 function hexToRgb(hex: string){ const v=parseInt(hex.slice(1),16); return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 }; }
 function hueDistance(a:number,b:number){ const d=Math.abs(a-b); return Math.min(d,1-d); }
 
-/* ---------- PDF export (unchanged from your latest) ---------- */
+/* ---------- PDF export (unchanged) ---------- */
 function exportAsPDF({
   brief, selected, palette, ai, crit, goal
 }: {
@@ -634,7 +780,8 @@ function exportAsPDF({
 
       // Appendix
       doc.addPage(); y = M;
-      addH2('Appendix: Inputs & QA');
+      const addH2_ = addH2; // silence TS
+      addH2_('Appendix: Inputs & QA');
       addParagraph(`Goal: ${goal}`);
       addParagraph(`Title: ${brief.title} | Artist: ${brief.artist}`);
       addParagraph(`Genre: ${brief.genre.join(', ')} | Mood: ${brief.mood.join(', ')} | Themes: ${brief.themes.join(', ')}`);
@@ -652,3 +799,6 @@ function exportAsPDF({
     });
   });
 }
+
+
+

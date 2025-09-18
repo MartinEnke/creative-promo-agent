@@ -283,3 +283,205 @@ hr.hairline{
     .header-actions{ gap: 8px; }
   }
   
+
+/* ---------- Stronger tone separation ---------- */
+:root{
+    /* Keep dynamic brand/accent/neutral, but widen bg contrast */
+    --bg: #091127;           /* darker page background */
+    --bg-2: #121b37;         /* lighter card background (more contrast) */
+    --ink: #e7ecfb;
+    --muted: #9fb0d3;
+    /* rest unchanged... */
+  }
+  
+  /* App background fixed + subtle color hotspots */
+  .app-bg{
+    background:
+      radial-gradient(900px 600px at 78% -10%, color-mix(in oklab, var(--brand) 16%, transparent), transparent 60%),
+      radial-gradient(800px 700px at -10% 25%, color-mix(in oklab, var(--accent) 14%, transparent), transparent 55%),
+      linear-gradient(180deg, var(--bg), #070b16 70%);
+    background-attachment: fixed, fixed, fixed;  /* <-- fixed backdrop */
+    color: var(--ink);
+  }
+  
+  /* ---------- Fixed, translucent header ---------- */
+  .site-header{
+    position: fixed; /* was sticky */
+    top: 0; left: 0; right: 0; z-index: 30;
+    backdrop-filter: saturate(140%) blur(10px);
+    background: color-mix(in oklab, var(--bg) 78%, black);
+    border-bottom: var(--border);
+  }
+  .header-row{ height: 64px; }
+  
+  /* Push the main content below the fixed header */
+  .page-grid{ padding-top: 88px; }
+  
+  /* ---------- Chip toggles: make goal presets pop ---------- */
+  .chip-toggle{
+    display:inline-flex; align-items:center; justify-content:center;
+    height: 28px; padding: 0 12px; border-radius: 999px;
+    font-weight: 600; font-size: 12px; letter-spacing: .01em;
+    background: color-mix(in oklab, var(--brand) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--brand) 35%, var(--hairline));
+    color: var(--ink); transition: background .2s, border-color .2s, transform .06s;
+  }
+  .chip-toggle--lg{ height: 32px; padding: 0 14px; font-size: 13px; }
+  .chip-toggle:hover{ transform: translateY(-1px); }
+  .chip-toggle--on{
+    background: color-mix(in oklab, var(--brand) 28%, transparent);
+    border-color: color-mix(in oklab, var(--brand) 60%, var(--hairline));
+    box-shadow: 0 4px 14px color-mix(in oklab, var(--brand) 25%, transparent);
+  }
+  
+  /* ---------- Hero buttons (primary actions) ---------- */
+  .btn-hero{
+    height: 42px;           /* bigger */
+    padding: 0 18px;
+    border-radius: 14px;
+    font-size: 14px;
+    box-shadow: 0 8px 20px color-mix(in oklab, var(--brand) 30%, black);
+  }
+  
+  /* ---------- Image grid that auto-sizes by orientation ---------- */
+  .image-grid{
+    --tile: 140px;                 /* base tile width */
+    --ratio: 66%;                  /* ~3:2 crop */
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr));
+    gap: 10px;
+  }
+  
+  /* Orientation size rules:
+     - portrait: ~2/3 size
+     - square:   ~1/2 size
+     - landscape: base
+     - auto: slightly smaller than base
+  */
+  .image-grid[data-orient="portrait"] { --tile: 94px; }  /* ~2/3 of 140 */
+  .image-grid[data-orient="square"]   { --tile: 70px; }  /* ~1/2 of 140 */
+  .image-grid[data-orient="landscape"]{ --tile: 140px; }
+  .image-grid[data-orient="auto"]     { --tile: 120px; }
+  
+  /* Image tiles: use CSS variable sizing */
+  .image-tile{
+    position: relative;
+    width: 100%;
+    padding-bottom: var(--ratio); /* 3:2 aspect */
+    border-radius: 12px;
+    overflow: hidden;
+    border: var(--border);
+    background: #0003;
+    transition: box-shadow .2s, transform .12s, border-color .2s;
+  }
+  .image-tile:hover{
+    transform: translateY(-1px);
+    border-color: color-mix(in oklab, var(--brand) 40%, var(--hairline));
+  }
+  .image-tile.selected{
+    box-shadow: 0 0 0 2px var(--brand) inset, 0 10px 26px rgba(0,0,0,0.35);
+  }
+  .image-tile-img{
+    position: absolute; inset: 0;
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  
+  /* ---------- Palette: keep compact ---------- */
+  .palette-card{ padding: 10px; max-width: 320px; }
+  .swatch{ width: 42px; height: 42px; }
+  
+  /* ---------- Content type slightly smaller ---------- */
+  .content-card{ padding: 14px; }
+  .content-h{ font-size: 13px; }
+  .content-body{ font-size: 13px; line-height: 1.6; }
+  .content-list li{ font-size: 13px; line-height: 1.45; }
+  
+  /* ---------- Footer unchanged for now ---------- */
+  
+
+/* ---------- Stronger tone separation (unchanged unless you prefer the darker tweak) ---------- */
+:root{
+  /* Your palette variables still get overwritten by JS */
+  --bg: #091127;           /* darker page background */
+  --bg-2: #121b37;         /* lighter card background (more contrast) */
+  --ink: #e7ecfb;
+  --muted: #9fb0d3;
+}
+
+/* ---------- Fixed, translucent header ---------- */
+.site-header{ position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+  backdrop-filter: saturate(140%) blur(10px);
+  background: color-mix(in oklab, var(--bg) 78%, black);
+  border-bottom: var(--border);
+}
+.header-row{ height: 64px; }
+.page-grid{ padding-top: 88px; }
+
+/* ---------- Chip toggles ---------- */
+.chip-toggle{ display:inline-flex; align-items:center; justify-content:center; height: 28px; padding: 0 12px; border-radius: 999px;
+  font-weight: 600; font-size: 12px; letter-spacing: .01em;
+  background: color-mix(in oklab, var(--brand) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--brand) 35%, var(--hairline));
+  color: var(--ink); transition: background .2s, border-color .2s, transform .06s;
+}
+.chip-toggle--lg{ height: 32px; padding: 0 14px; font-size: 13px; }
+.chip-toggle:hover{ transform: translateY(-1px); }
+.chip-toggle--on{ background: color-mix(in oklab, var(--brand) 28%, transparent);
+  border-color: color-mix(in oklab, var(--brand) 60%, var(--hairline));
+  box-shadow: 0 4px 14px color-mix(in oklab, var(--brand) 25%, transparent);
+}
+
+/* ---------- Hero buttons (primary actions) ---------- */
+.btn-hero{ height: 42px; padding: 0 18px; border-radius: 14px; font-size: 14px;
+  box-shadow: 0 8px 20px color-mix(in oklab, var(--brand) 30%, black);
+}
+
+/* ---------- Image grid with orientation-aware aspect ---------- */
+.image-grid{ --tile: 140px; --ratio: 66%; display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr)); gap: 10px;
+}
+.image-grid[data-orient="portrait"] { --tile: 94px;  --ratio: 150%; }
+.image-grid[data-orient="square"]   { --tile: 100px; --ratio: 100%; }
+.image-grid[data-orient="landscape"]{ --tile: 150px; --ratio: 56%; }
+.image-grid[data-orient="auto"]     { --tile: 120px; --ratio: 66%; }
+
+.image-tile{ position: relative; width: 100%; padding-bottom: var(--ratio);
+  border-radius: 14px; overflow: hidden; border: var(--border); background: #0003;
+  transition: box-shadow .2s, transform .12s, border-color .2s;
+}
+.image-tile:hover{ transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--brand) 40%, var(--hairline));
+}
+
+/* ---------- Selected glow: brand→accent gradient ring + soft aura ---------- */
+.image-tile.selected{ box-shadow: 0 10px 26px rgba(0,0,0,0.35); }
+.image-tile.selected::after{ content: ""; position: absolute; inset: -2px; border-radius: inherit; padding: 2px;
+  background: conic-gradient(from 20deg, var(--brand), var(--accent), var(--brand));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: spinGlow 6s linear infinite;
+  filter: drop-shadow(0 0 12px color-mix(in oklab, var(--accent) 60%, transparent));
+}
+@keyframes spinGlow{ to { transform: rotate(360deg); } }
+
+.image-tile-img{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tile-cap{ position:absolute; left:0; right:0; bottom:0; padding: 2px 6px; font-size: 10px; color:#fff; background: rgba(0,0,0,.45); }
+
+/* ---------- Cards, inputs, micro spacing polish ---------- */
+.card{ border-radius: var(--radius); padding: 16px; }
+.group-block{ background: var(--bg-2); border: var(--border); border-radius: var(--radius); padding: 12px; display: grid; gap: 8px; }
+.label{ margin-bottom: 2px; }
+.input{ height: 42px; border-radius: 12px; }
+.hint{ font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Keep your existing footer/header styles unless you prefer the new tones above */
+
+
+/* prompt input tweaks */
+.prompt-input{ height: 220px; resize: vertical; white-space: pre-wrap; }
+
+
+.palette-card{ padding:10px; max-width:320px; }
+.swatch-row{ display:flex; gap:8px; }
+.swatch{ width:42px; height:42px; border-radius:12px; border:1px solid rgba(0,0,0,0.15); position:relative; }
+.swatch-tag{ position:absolute; left:4px; bottom:4px; font-size:9px; background:#fff8; color:#111; border-radius:6px; padding:1px 4px; }
