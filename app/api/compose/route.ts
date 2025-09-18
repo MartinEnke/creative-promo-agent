@@ -135,4 +135,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `OpenAI error ${e?.status || ''}: ${e?.message || 'unknown'}` }, { status: 500 });
   }
 }
-

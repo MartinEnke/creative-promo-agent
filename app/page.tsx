@@ -293,7 +293,7 @@ export default function Page() {
         <div className="container header-row">
           <div className="brand">
             <div className="brand-dot" />
-            <span>Creative Promo Agent</span>
+            <span>Creative AI Promo Agent</span>
           </div>
           <div className="header-actions">
             <button className="btn-secondary" onClick={runDemo}>Try demo</button>
@@ -305,7 +305,9 @@ export default function Page() {
       <main className="container page-grid">
         {/* LEFT COLUMN */}
         <section className="section">
-          <SectionHead step="1" title="Brief" subtitle="Track details and creative direction." />
+<div className="section-toolbar toolbar-glow is-brief">
+<SectionHead step="1" title="Brief" subtitle="Track details and creative direction." />
+</div>
 
           {/* Goal chips (labels updated) */}
           <div className="group-block">
@@ -354,7 +356,13 @@ export default function Page() {
 
               {/* Moved here: Search Images */}
               <div className="row gap-8">
-                <button className="btn-secondary" onClick={curateFromThemes} disabled={imgLoading}>{imgLoading ? 'Searching…' : 'Search Images'}</button>
+              <button
+  className="btn-primary-soft"
+  onClick={curateFromThemes}
+  disabled={imgLoading}
+>
+  {imgLoading ? 'Searching…' : 'Search Images'}
+</button>
               </div>
               {msg && <p className="msg-error">{msg}</p>}
             </div>
@@ -363,15 +371,15 @@ export default function Page() {
 
         {/* RIGHT COLUMN */}
         <section className="section">
-          <div className="section-toolbar">
-            <SectionHead step="2" title="Execute & content" subtitle="Generate and refine copy for your release." />
-            <div className="row gap-8">
-              <span className="badge">Selected: {selected.length}</span>
-              <button className="btn-primary btn-hero" onClick={handleExecute} disabled={selected.length === 0 || !palette.length || aiLoading || critLoading}>
-                {(aiLoading || critLoading) ? 'Generating…' : 'Execute Promo Agent'}
-              </button>
-            </div>
-          </div>
+<div className="section-toolbar toolbar-glow is-exec">
+<SectionHead step="2" title="Execute & content" subtitle="Generate and refine copy for your release." />
+<div className="row gap-8">
+<span className="badge">Selected: {selected.length}</span>
+<button className="btn-primary btn-hero" onClick={handleExecute} disabled={selected.length === 0 || !palette.length || aiLoading || critLoading}>
+{(aiLoading || critLoading) ? 'Generating…' : 'Execute Promo Agent'}
+</button>
+</div>
+</div>
 
           {/* Image grid (square) with palette overlay */}
           <div className="card image-card">
