@@ -485,3 +485,51 @@ hr.hairline{
 .swatch-row{ display:flex; gap:8px; }
 .swatch{ width:42px; height:42px; border-radius:12px; border:1px solid rgba(0,0,0,0.15); position:relative; }
 .swatch-tag{ position:absolute; left:4px; bottom:4px; font-size:9px; background:#fff8; color:#111; border-radius:6px; padding:1px 4px; }
+
+
+/* Grid card needs positioning context for the palette overlay */
+.image-card { position: relative; }
+
+/* Palette overlay inside the image grid card (bottom-right) */
+.palette-overlay {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  max-width: 320px;
+  z-index: 2;
+}
+
+/* Always-square tiles (we already honor data-orient="square") */
+.image-grid[data-orient="square"]   { --tile: 100px; --ratio: 100%; }
+.image-tile { position: relative; width: 100%; padding-bottom: var(--ratio); }
+.image-tile-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Palette card stays compact */
+.palette-card{ padding:10px; }
+.swatch-row{ display:flex; gap:8px; }
+.swatch{ width:42px; height:42px; border-radius:12px; border:1px solid rgba(0,0,0,0.15); position:relative; }
+.swatch-tag{ position:absolute; left:4px; bottom:4px; font-size:9px; background:#fff8; color:#111; border-radius:6px; padding:1px 4px; }
+
+
+/* Grid card needs positioning context for the palette overlay */
+.image-card { position: relative; }
+
+/* Palette overlay inside the image grid card (bottom-right) */
+.palette-overlay {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  max-width: 320px;
+  z-index: 2;
+}
+
+/* Always-square tiles (we already honor data-orient="square") */
+.image-grid[data-orient="square"]   { --tile: 100px; --ratio: 100%; }
+.image-tile { position: relative; width: 100%; padding-bottom: var(--ratio); }
+.image-tile-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Palette card stays compact */
+.palette-card{ padding:10px; }
+.swatch-row{ display:flex; gap:8px; }
+.swatch{ width:42px; height:42px; border-radius:12px; border:1px solid rgba(0,0,0,0.15); position:relative; }
+.swatch-tag{ position:absolute; left:4px; bottom:4px; font-size:9px; background:#fff8; color:#111; border-radius:6px; padding:1px 4px; }

@@ -1,3 +1,4 @@
+
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
@@ -14,14 +15,24 @@ import { writeBio120, writeCaptions, writeLoglines, weekPlan } from '@/lib/ccopy
 function cx(...c: (string | false | undefined)[]) { return c.filter(Boolean).join(' '); }
 function toList(s: string): string[] { return (s || '').split(/[|,/•·]+/).map(x => x.trim()).filter(Boolean); }
 
-// Intent clarifies purpose of image search for users
-type ImageIntent = 'palette' | 'cover';
-
 // Cover prompt options
 type StylePreset = 'graphic poster' | 'painterly' | 'cinematic photo' | '3D render' | 'neon collage' | 'ink & grain';
 
+// Orientation is now locked to square in the UI/logic
+// (we keep the type for prompt composition/consistency)
 type Orientation = 'auto' | 'landscape' | 'portrait' | 'square';
-type Goal = 'pre_save' | 'press_kit' | 'tiktok' | 'playlist_pitch';
+
+type Goal = 'pre_save' | 'pre_sale' | 'press_kit' | 'tiktok' | 'instagram' | 'playlist_pitch';
+
+const goalLabel = (g: Goal) => ({
+  pre_sale: 'Pre-Sale',
+  pre_save: 'Pre-Save',
+  press_kit: 'Press kit',
+  instagram: 'Instagram',
+  tiktok: 'TikTok',
+  playlist_pitch: 'Playlist pitch',
+}[g]);
+
 
 type AIContent = {
   loglines: string[];
@@ -61,9 +72,8 @@ export default function Page() {
   const [selected, setSelected] = useState<ImageRef[]>([]);
   const [palette, setPalette] = useState<string[]>([]);
 
-  // intent + orientation
-  const [imageIntent, setImageIntent] = useState<ImageIntent>('palette');
-  const [orientation, setOrientation] = useState<Orientation>('square');
+  // Orientation is locked to square (no UI)
+  const orientation: Orientation = 'square';
 
   // --- UI state ---
   const [linkLoading, setLinkLoading] = useState(false);
@@ -140,8 +150,8 @@ export default function Page() {
     setGenreStr('synthwave, indie pop');
     setMoodStr('nocturnal, euphoric');
     setThemesStr('neon city, rain, 2 AM streets');
-    setGoal('pre_save');
-    await searchImages('neon city rain 2 AM streets', 'portrait');
+    setGoal('pre_sale');
+    await searchImages('neon city rain 2 AM streets');
     setTimeout(() => {
       const picks = images.slice(0, 2);
       setSelected(picks);
@@ -150,19 +160,18 @@ export default function Page() {
     }, 250);
   }
 
-  // Curate images directly from THEMES (+ orientation)
+  // Search based on THEMES (orientation fixed to square)
   async function curateFromThemes() {
     const q = toList(themesStr).join(' ');
     if (!q) { setMsg('Add a few themes first (e.g., neon city, rain).'); return; }
-    await searchImages(q, orientation);
+    await searchImages(q);
   }
 
   // ————————————————————————————————————————————
-  // Orientation-aware search + client-side filtering
+  // Image search (square) — removed orientation filtering
   // ————————————————————————————————————————————
 
   const dimsCache = useRef(new Map<string, { w: number; h: number }>());
-
   function getDims(img: ImageRef): Promise<{ w: number; h: number }>{
     const key = img.thumb || img.url;
     const cached = dimsCache.current.get(key);
@@ -180,27 +189,10 @@ export default function Page() {
     });
   }
 
-  function matchOrientation(w: number, h: number, orient: Orientation){
-    if (orient === 'auto') return true;
-    const ratio = w / h; // >1 landscape, <1 portrait
-    const TH = 0.12;     // tolerance band ~12%
-    if (orient === 'square') return Math.abs(ratio - 1) <= TH;
-    if (orient === 'portrait') return ratio <= (1 - TH);
-    if (orient === 'landscape') return ratio >= (1 + TH);
-    return true;
-  }
-
-  async function filterByOrientation(list: ImageRef[], orient: Orientation){
-    if (orient === 'auto') return list;
-    const pairs = await Promise.all(list.map(async (img) => ({ img, dims: await getDims(img) })));
-    const filtered = pairs.filter(({ dims }) => matchOrientation(dims.w, dims.h, orient)).map(p => p.img);
-    return filtered.length >= 6 ? filtered : list; // graceful fallback
-  }
-
-  async function searchImages(query: string, orient: Orientation) {
+  async function searchImages(query: string) {
     setImgLoading(true); setMsg(null);
     setSelected([]); setPalette([]); setExecuted(false); setAi(null); setCrit(null);
-    const url = '/api/images?count=20&orientation=' + orient + '&query=' + encodeURIComponent(query);
+    const url = '/api/images?count=20&orientation=square&query=' + encodeURIComponent(query);
     const r = await fetch(url);
     const j = await r.json();
     if (j.error) {
@@ -210,8 +202,7 @@ export default function Page() {
       setImages([]); setMsg('No images found for this query. Try simpler terms.');
     } else {
       const raw: ImageRef[] = j.images;
-      const filtered = await filterByOrientation(raw, orient);
-      setImages(filtered);
+      setImages(raw); // no orientation filtering; we crop to square in CSS
     }
     setImgLoading(false);
   }
@@ -267,27 +258,26 @@ export default function Page() {
 
   function exportPDF() { exportAsPDF({ brief: workingBrief, selected, palette, ai, crit, goal }); }
 
-
-  /* ---------- Palette block ---------- */
-function PaletteBlock({ palette }: { palette: string[] }) {
-  return (
-    <div className="card palette-card">
-      {palette.length === 0 ? (
-        <p className="text-sm text-muted">
-          Select 1–3 images and we’ll extract a 5-color palette.
-        </p>
-      ) : (
-        <div className="swatch-row">
-          {palette.map((hex, i) => (
-            <div key={i} className="swatch" style={{ background: hex }}>
-              <span className="swatch-tag">{hex}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+  /* ---------- Palette block (to be overlaid in grid) ---------- */
+  function PaletteBlock({ palette }: { palette: string[] }) {
+    return (
+      <div className="card palette-card">
+        {palette.length === 0 ? (
+          <p className="text-sm text-muted">
+            Select 1–3 images and we’ll extract a 5-color palette.
+          </p>
+        ) : (
+          <div className="swatch-row">
+            {palette.map((hex, i) => (
+              <div key={i} className="swatch" style={{ background: hex }}>
+                <span className="swatch-tag">{hex}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const genreChips = toList(genreStr);
   const moodChips  = toList(moodStr);
@@ -317,14 +307,14 @@ function PaletteBlock({ palette }: { palette: string[] }) {
         <section className="section">
           <SectionHead step="1" title="Brief" subtitle="Track details and creative direction." />
 
-          {/* Goal chips */}
+          {/* Goal chips (labels updated) */}
           <div className="group-block">
             <div className="label">Goal</div>
             <div className="chip-row">
               {([
-                { id: 'pre_save', label: 'Pre-save' },
+                { id: 'pre_sale', label: 'Pre-Sale' },
                 { id: 'press_kit', label: 'Press kit' },
-                { id: 'tiktok', label: 'TikTok' },
+                { id: 'instagram', label: 'Instagram' },
                 { id: 'playlist_pitch', label: 'Playlist pitch' },
               ] as {id:Goal;label:string}[]).map(opt => (
                 <button key={opt.id} onClick={()=>setGoal(opt.id)} className={cx('chip-toggle chip-toggle--lg', goal===opt.id && 'chip-toggle--on')}>{opt.label}</button>
@@ -361,51 +351,20 @@ function PaletteBlock({ palette }: { palette: string[] }) {
               <ChipPreview items={moodChips} />
               <input className="input" value={themesStr} onChange={e=>setThemesStr(e.target.value)} placeholder="Themes (comma-separated, visual)" />
               <ChipPreview items={themeChips} />
+
+              {/* Moved here: Search Images */}
+              <div className="row gap-8">
+                <button className="btn-secondary" onClick={curateFromThemes} disabled={imgLoading}>{imgLoading ? 'Searching…' : 'Search Images'}</button>
+              </div>
+              {msg && <p className="msg-error">{msg}</p>}
             </div>
           </div>
-
-          <hr className="hairline" />
-
-          {/* Curate controls */}
-          <SectionHead step="2" title="Curate images" subtitle="Themes drive visuals. Pick 1–3 for a focused palette." compact />
-
-          {/* Image intent */}
-          <div className="group-block">
-            <div className="label">Image intent</div>
-            <div className="chip-row">
-              {(['palette', 'cover'] as ImageIntent[]).map(int => (
-                <button key={int} onClick={()=>setImageIntent(int)} className={cx('chip-toggle', imageIntent===int && 'chip-toggle--on')}>
-                  {int === 'palette' ? 'Color palette' : 'Cover artwork (check license)'}
-                </button>
-              ))}
-            </div>
-            {imageIntent==='cover' && (
-              <p className="hint">Inspiration only. Verify licensing before using an image as final artwork.</p>
-            )}
-          </div>
-
-          <div className="row wrap gap-8">
-            <div className="chip-row">
-              {(['auto','landscape','portrait','square'] as Orientation[]).map(o=> (
-                <button key={o} onClick={()=>setOrientation(o)} className={cx('chip-toggle', orientation===o && 'chip-toggle--on')}>{o}</button>
-              ))}
-            </div>
-            <button className="btn-secondary" onClick={curateFromThemes} disabled={imgLoading}>{imgLoading ? 'Searching…' : 'Search images'}</button>
-          </div>
-
-          {msg && <p className="msg-error">{msg}</p>}
-
-          <hr className="hairline" />
-
-          {/* Palette */}
-          <SectionHead step="3" title="Palette" subtitle="Auto-extracted from your selected images." compact />
-          <PaletteBlock palette={palette} />
         </section>
 
         {/* RIGHT COLUMN */}
         <section className="section">
           <div className="section-toolbar">
-            <SectionHead step="4" title="Execute & content" subtitle="Generate and refine copy for your release." />
+            <SectionHead step="2" title="Execute & content" subtitle="Generate and refine copy for your release." />
             <div className="row gap-8">
               <span className="badge">Selected: {selected.length}</span>
               <button className="btn-primary btn-hero" onClick={handleExecute} disabled={selected.length === 0 || !palette.length || aiLoading || critLoading}>
@@ -414,10 +373,10 @@ function PaletteBlock({ palette }: { palette: string[] }) {
             </div>
           </div>
 
-          {/* Image grid */}
-          <div className="card">
+          {/* Image grid (square) with palette overlay */}
+          <div className="card image-card">
             {images.length === 0 ? (
-              <p className="text-sm text-muted">Add themes and click “Search images”.</p>
+              <p className="text-sm text-muted">Add themes and click “Search Images”.</p>
             ) : (
               <div className="image-grid" data-orient={orientation}>
                 {images.slice(0, 20).map((img, i) => {
@@ -432,9 +391,14 @@ function PaletteBlock({ palette }: { palette: string[] }) {
               </div>
             )}
             <p className="hint mt-2">Tip: pick <b>1–3 images</b> for a clean palette.</p>
+
+            {/* Palette now lives inside the grid card, bottom-right */}
+            <div className="palette-overlay">
+              <PaletteBlock palette={palette} />
+            </div>
           </div>
 
-          {/* —— NEW: Prompt Composer —— */}
+          {/* —— Prompt Composer —— */}
           <div className="card">
             <h4 className="content-h" style={{marginBottom:8}}>Cover prompt (copy & paste into your image model)</h4>
             <div className="row wrap gap-8" style={{marginBottom:8}}>
@@ -528,7 +492,7 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
         </div>
         <div className="space-y-10">
           <div>
-            <h4 className="content-h">Captions (A/B)</h4>
+            <h4 className="content-h">Captions (A/B) {ai ? <span className="badge">AI</span> : <span className="badge">Fallback</span>}</h4>
             {ai ? (
               <div className="grid grid-cols-2 gap-6">
                 <div>
@@ -546,7 +510,7 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
             {crit?.winnerReasons && <p className="hint mt-2">Why: {crit.winnerReasons}</p>}
           </div>
           <div>
-            <h4 className="content-h">7-Day Plan</h4>
+            <h4 className="content-h">7-Day Plan {ai ? <span className="badge">AI</span> : <span className="badge">Fallback</span>}</h4>
             <ul className="content-list">
               {plan.map((d,i)=>(<li key={i}><span className="bold">{d.day}:</span> {d.idea} — <em className="muted">{d.hook}</em></li>))}
             </ul>
@@ -681,7 +645,7 @@ function hexToHsl(hex: string) {
 function hexToRgb(hex: string){ const v=parseInt(hex.slice(1),16); return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 }; }
 function hueDistance(a:number,b:number){ const d=Math.abs(a-b); return Math.min(d,1-d); }
 
-/* ---------- PDF export (unchanged) ---------- */
+/* ---------- PDF export (updated to show friendly goal label) ---------- */
 function exportAsPDF({
   brief, selected, palette, ai, crit, goal
 }: {
@@ -727,7 +691,7 @@ function exportAsPDF({
     doc.setDrawColor(ac.r,ac.g,ac.b); doc.setLineWidth(2); doc.line(M,y,W-M,y);
     y += 16;
     doc.setFont('helvetica','normal'); doc.setFontSize(10);
-    doc.text(`Artist: ${brief.artist || '—'}  |  Goal: ${goal}  |  Genre: ${(brief.genre||[]).join(', ') || '—'}  |  Mood: ${(brief.mood||[]).join(', ') || '—'}  |  Themes: ${(brief.themes||[]).join(', ') || '—'}`, M, y, { maxWidth: MAX });
+    doc.text(`Artist: ${brief.artist || '—'}  |  Goal: ${goalLabel(goal)}  |  Genre: ${(brief.genre||[]).join(', ') || '—'}  |  Mood: ${(brief.mood||[]).join(', ') || '—'}  |  Themes: ${(brief.themes||[]).join(', ') || '—'}`, M, y, { maxWidth: MAX });
 
     // Palette
     y += 24; addH2('Palette');
@@ -782,7 +746,7 @@ function exportAsPDF({
       doc.addPage(); y = M;
       const addH2_ = addH2; // silence TS
       addH2_('Appendix: Inputs & QA');
-      addParagraph(`Goal: ${goal}`);
+      addParagraph(`Goal: ${goalLabel(goal)}`);
       addParagraph(`Title: ${brief.title} | Artist: ${brief.artist}`);
       addParagraph(`Genre: ${brief.genre.join(', ')} | Mood: ${brief.mood.join(', ')} | Themes: ${brief.themes.join(', ')}`);
       if (crit) {
@@ -799,6 +763,3 @@ function exportAsPDF({
     });
   });
 }
-
-
-
