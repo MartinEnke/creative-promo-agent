@@ -5,7 +5,7 @@
 // Creative AI Promo Agent — Page
 // ————————————————————————————————————————————
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef} from 'react';
 import { CreativeBrief, ImageRef, UserInput } from '@/lib/types';
 import { writeBio120, writeCaptions, writeLoglines, weekPlan } from '@/lib/ccopy';
 
@@ -54,6 +54,7 @@ type Critique = {
    PAGE
    ====================================================== */
 export default function Page() {
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   // inside Page() component
 const CLEAR_QUERY_ON_REFRESH = true; // set false if you want to keep ?intro=0 etc.
@@ -107,6 +108,8 @@ useEffect(() => {
     documentElement.style.overflow = prevDoc;
   };
 }, [showIntro]);
+
+
 
   // --- Inputs & editable metadata ---
   const [link, setLink] = useState('');
@@ -193,6 +196,31 @@ useEffect(() => {
     }
   }
 
+  useEffect(() => {
+    if (!executed || !palette.length || !contentRef.current) return;
+  
+    // read CSS var --header-h (fallback 64)
+    const root = getComputedStyle(document.documentElement);
+    const hVar = root.getPropertyValue('--header-h').trim();
+    const headerH = Number.parseInt(hVar, 10);
+    const offset = Number.isFinite(headerH) ? headerH + 12 : 76; // a bit of breathing room
+  
+    // wait one frame so the DOM is fully laid out
+    requestAnimationFrame(() => {
+      const el = contentRef.current!;
+      const top = el.getBoundingClientRect().top + window.scrollY - offset;
+  
+      window.scrollTo({ top, behavior: 'smooth' });
+  
+      // optional: move keyboard focus for a11y
+      // try focusing the first heading inside the panel, else the wrapper
+      const focusable =
+        el.querySelector<HTMLElement>('.content-title, .content-label, h4, h3') || el;
+      focusable.setAttribute('tabindex', '-1');
+      focusable.focus({ preventScroll: true });
+    });
+  }, [executed, palette.length, ai, crit]);
+
   // Search images (returns list so callers can sample)
   // Replace your searchImages with this version
 async function searchImages(query: string): Promise<ImageRef[]> {
@@ -254,15 +282,19 @@ async function runDemo() {
 }
 
 
-  function toggle(img: ImageRef) {
-    setSelected(prev => {
-      const exists = prev.find(p => p.url === img.url);
-      const next = exists ? prev.filter(p => p.url !== img.url) : [...prev, img].slice(0, 12);
-      extractPalette(next.map(s => s.thumb)).then(setPalette).catch(()=>setPalette([]));
-      setExecuted(false); setAi(null); setCrit(null);
-      return next;
-    });
-  }
+function toggle(img: ImageRef) {
+  setSelected(prev => {
+    const exists = prev.find(p => p.url === img.url);
+    const next = exists ? prev.filter(p => p.url !== img.url) : [...prev, img].slice(0, 12);
+
+    // update palette from the new selection, but DO NOT clear executed/ai/crit
+    extractPalette(next.map(s => s.thumb))
+      .then(cols => setPalette(cols))
+      .catch(() => {/* leave palette as-is on failure */});
+
+    return next;
+  });
+}
 
   async function handleExecute() {
     if (selected.length === 0 || !palette.length) return;
@@ -357,7 +389,7 @@ async function runDemo() {
             <div className="chip-row">
               {([
                 { id: 'pre_sale', label: 'Pre-Sale' },
-                { id: 'press_kit', label: 'Press kit' },
+               
                 { id: 'instagram', label: 'Instagram' },
                 { id: 'playlist_pitch', label: 'Playlist pitch' },
               ] as {id:Goal;label:string}[]).map(opt => (
@@ -527,9 +559,11 @@ async function runDemo() {
           </div>
 
           {/* Content */}
-          {executed && (palette.length > 0) && (
-            <CopyPanel brief={workingBrief} ai={ai} crit={crit} />
-          )}
+          {executed && ai && (
+  <div ref={contentRef}>
+    <CopyPanel brief={workingBrief} ai={ai} crit={crit} />
+  </div>
+)}
         </section>
       </main>
 
