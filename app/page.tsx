@@ -260,27 +260,36 @@ async function runDemo() {
     <>
       {/* Header */}
       <header className="site-header">
-        <div className="container header-row">
-          <div className="brand">
-            <div className="brand-dot" />
-            <span>Creative AI Promo Agent</span>
-          </div>
-          <div className="header-actions">
-            <button className="btn-secondary" onClick={runDemo}>Try demo</button>
+  <div className="container header-row">
+    <div className="brand">
+      <div className="brand-dot" />
+      <span>AI Promo Agent</span>
+    </div>
 
-            {/* Only active after Execute Promo Agent has run, with images + palette */}
-            <button
-              className="btn-primary btn-hero"
-              onClick={exportPDF}
-              disabled={!executed || !palette.length || !selected.length}
-              title={!executed ? 'Run “Execute Promo Agent” first' : undefined}
-              aria-disabled={!executed || !palette.length || !selected.length}
-            >
-              Export PDF
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="header-actions">
+      <button
+        type="button"
+        className="btn btn-primary-soft btn-pill header-btn"
+        onClick={runDemo}
+      >
+        Try demo
+      </button>
+
+      <button
+        type="button"
+        className="btn btn-primary btn-pill header-btn"
+        onClick={exportPDF}
+        disabled={!executed || !palette.length || !selected.length}
+        title={!executed ? 'Run “Execute Promo Agent” first' : undefined}
+        aria-disabled={!executed || !palette.length || !selected.length}
+      >
+        Export PDF
+      </button>
+    </div>
+  </div>
+</header>
+
+
 
       <main className="container page-grid">
         {/* LEFT COLUMN */}
@@ -399,7 +408,7 @@ async function runDemo() {
           {/* —— Prompt Composer —— */}
           <div className="card card--composer">
             <div className="label label-lg pc-section-label">Build Cover Prompt</div>
-            <br />
+
             <div className="pc-row pc-style">
               <div className="chip-row">
                 {(['graphic poster','painterly','cinematic photo','3D render','neon collage','ink & grain'] as StylePreset[]).map(s => (
