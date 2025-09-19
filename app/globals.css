@@ -234,3 +234,93 @@ textarea.input{ height: 110px; resize: vertical; }
   .section-toolbar{ gap: 10px; flex-direction: column; align-items: stretch; }
   .header-actions{ gap: 8px; }
 }
+
+
+/* ===== Content layout polish ===== */
+
+/* Card gets more breathing room and consistent rhythm */
+.content-card.content-pro {
+    padding: 20px;
+  }
+  
+  /* Each logical block */
+  .content-group + .content-group { margin-top: 18px; }
+  
+  /* Top of each group: title + small meta on the right */
+  .content-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  
+  /* Title slightly larger than regular content-h, but still compact */
+  .content-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+  
+  /* Lightweight meta (no icons) */
+  .meta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .meta-item { font-size: 12px; color: var(--muted); }
+  
+  /* Hairline divider between groups */
+  .divider {
+    height: 1px;
+    background: var(--hairline);
+    margin: 14px 0;
+  }
+  
+  /* Lists: tighter but even spacing and better readability */
+  .content-list {
+    margin: 0;
+    padding-left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;                 /* even vertical rhythm */
+  }
+  .content-list li {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  
+  /* Body copy for the Bio */
+  .content-body {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink);
+    margin: 0;
+  }
+  
+  /* Captions A/B grid */
+  .caption-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  
+  /* Plan presentation */
+  .plan-list .plan-day { font-weight: 600; margin-right: 6px; }
+  .plan-list .plan-hook { color: var(--muted); font-style: italic; }
+  
+  /* QA note block */
+  .qa-notes { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--hairline); }
+  .qa-title { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+  
+  /* Winner highlight (already defined) */
+  .text-win { color: color-mix(in oklab, var(--brand) 80%, white); }
+  
+  /* Responsive: captions stack gracefully */
+  @media (max-width: 820px){
+    .caption-grid { grid-template-columns: 1fr; }
+  }
+  
+
+  /* Content label at the top of the card */
+.content-label { margin-bottom: 24px; font-size: small;}
+
+/* Keep badges in meta aligned nicely with text */
+.meta { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }

@@ -532,61 +532,109 @@ function ChipPreview({ items }: { items: string[] }) {
 
 /* ---------- Copy Panel (A/B + winner, smaller type) ---------- */
 function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | null; crit: Critique | null }) {
-  const winner = crit?.captionsWinner ?? 'A';
+  const winner   = crit?.captionsWinner ?? 'A';
+  const logs     = ai?.loglines ?? writeLoglines(brief);
+  const bio      = ai?.bio120  ?? writeBio120(brief);
+  const plan     = ai?.plan    ?? weekPlan(brief);
   const captions = ai ? (winner === 'A' ? ai.captionsA : ai.captionsB) : writeCaptions(brief);
-  const logs = ai?.loglines ?? useMemo(()=> writeLoglines(brief), [brief]);
-  const bio  = ai?.bio120  ?? useMemo(()=> writeBio120(brief), [brief]);
-  const plan = ai?.plan ?? useMemo(()=> weekPlan(brief), [brief]);
+  const hasAI    = !!ai;
+
+  // OPTIONAL: rename the section title from "Loglines" to a more promo-native word:
+  const LOG_TITLE = 'Hooks'; // or 'Taglines' / 'Key Phrases'
 
   return (
-    <div className="card content-card">
-      <div className="grid md:grid-cols-2 gap-12">
-        <div className="space-y-10">
-          <div>
-            <h4 className="content-h">Loglines {ai ? <span className="badge">AI</span> : <span className="badge">Fallback</span>}</h4>
-            <ul className="content-list">{logs.map((l,i)=>(<li key={i}>{l}</li>))}</ul>
-          </div>
-          <div>
-            <h4 className="content-h">120-word Bio {ai ? <span className="badge">AI</span> : <span className="badge">Fallback</span>}</h4>
-            <p className="content-body">{bio}</p>
-          </div>
-        </div>
-        <div className="space-y-10">
-          <div>
-            <h4 className="content-h">Captions (A/B) {ai ? <span className="badge">AI</span> : <span className="badge">Fallback</span>}</h4>
-            {ai ? (
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <div className={cx('content-sub', crit?.captionsWinner==='A' && 'text-win')}>Set A {crit?.captionsWinner==='A' && '• Winner'}</div>
-                  <ul className="content-list">{ai.captionsA.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
-                </div>
-                <div>
-                  <div className={cx('content-sub', crit?.captionsWinner==='B' && 'text-win')}>Set B {crit?.captionsWinner==='B' && '• Winner'}</div>
-                  <ul className="content-list">{ai.captionsB.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
-                </div>
-              </div>
-            ) : (
-              <ul className="content-list">{captions.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
-            )}
-            {crit?.winnerReasons && <p className="hint mt-2">Why: {crit.winnerReasons}</p>}
-          </div>
-          <div>
-            <h4 className="content-h">7-Day Plan {ai ? <span className="badge">AI</span> : <span className="badge">Fallback</span>}</h4>
-            <ul className="content-list">
-              {plan.map((d,i)=>(<li key={i}><span className="bold">{d.day}:</span> {d.idea} — <em className="muted">{d.hook}</em></li>))}
-            </ul>
-            {crit?.issues?.length ? (
-              <div className="qa-notes">
-                <div className="bold">Referee notes</div>
-                <ul>{crit.issues.map((x,i)=>(<li key={i}>{x}</li>))}</ul>
-              </div>
-            ) : null}
+    <div className="card content-card content-pro">
+      {/* Box label */}
+      <div className="label label-lg content-label">Content Creation</div>
+
+      {/* Group: Loglines (aka Hooks) */}
+      <section className="content-group">
+        <div className="content-head">
+          <h4 className="content-title">{LOG_TITLE}</h4>
+          <div className="meta">
+            <span className="badge">{hasAI ? 'AI' : 'Fallback'}</span>
           </div>
         </div>
-      </div>
+        <ul className="content-list">
+          {logs.map((l, i) => <li key={i}>{l}</li>)}
+        </ul>
+      </section>
+
+      <div className="divider" />
+
+      {/* Group: Bio */}
+      <section className="content-group">
+        <div className="content-head">
+          <h4 className="content-title">120-word Bio</h4>
+          <div className="meta">
+            <span className="badge">{hasAI ? 'AI' : 'Fallback'}</span>
+          </div>
+        </div>
+        <p className="content-body">{bio}</p>
+      </section>
+
+      <div className="divider" />
+
+      {/* Group: Captions A/B */}
+      <section className="content-group">
+        <div className="content-head">
+          <h4 className="content-title">Captions (A/B)</h4>
+          <div className="meta">
+            <span className="badge">{hasAI ? 'AI' : 'Fallback'}</span>
+            {crit && <span className="badge">QA</span>}
+            {ai && <span className="meta-item">Winner: <b>{winner}</b></span>}
+            {crit?.winnerReasons && <span className="meta-item">Why: {crit.winnerReasons}</span>}
+          </div>
+        </div>
+
+        {ai ? (
+          <div className="caption-grid">
+            <div>
+              <div className={cx('content-sub', winner==='A' && 'text-win')}>Set A {winner==='A' && '• Selected'}</div>
+              <ul className="content-list">{ai.captionsA.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
+            </div>
+            <div>
+              <div className={cx('content-sub', winner==='B' && 'text-win')}>Set B {winner==='B' && '• Selected'}</div>
+              <ul className="content-list">{ai.captionsB.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
+            </div>
+          </div>
+        ) : (
+          <ul className="content-list">{captions.map((c,i)=>(<li key={i}>{c}</li>))}</ul>
+        )}
+      </section>
+
+      <div className="divider" />
+
+      {/* Group: 7-Day Plan */}
+      <section className="content-group">
+        <div className="content-head">
+          <h4 className="content-title">7-Day Plan</h4>
+          <div className="meta">
+            <span className="badge">{hasAI ? 'AI' : 'Fallback'}</span>
+            {crit?.issues?.length ? <span className="badge">QA</span> : null}
+          </div>
+        </div>
+
+        <ul className="content-list plan-list">
+          {plan.map((d,i)=>(
+            <li key={i}>
+              <span className="plan-day">{d.day}:</span> {d.idea}
+              <span className="plan-hook"> — {d.hook}</span>
+            </li>
+          ))}
+        </ul>
+
+        {crit?.issues?.length ? (
+          <div className="qa-notes">
+            <div className="qa-title">Referee notes</div>
+            <ul className="content-list">{crit.issues.map((x,i)=>(<li key={i}>{x}</li>))}</ul>
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }
+
 
 /* ---------- Prompt composer ---------- */
 function composeCoverPrompt({
