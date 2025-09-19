@@ -94,6 +94,19 @@ useEffect(() => {
 }, []);
 
 
+useEffect(() => {
+  if (!showIntro) return;
+  const { body, documentElement } = document;
+  const prevBody = body.style.overflow;
+  const prevDoc  = documentElement.style.overflow;
+  body.style.overflow = 'hidden';
+  documentElement.style.overflow = 'hidden';
+
+  return () => {
+    body.style.overflow = prevBody;
+    documentElement.style.overflow = prevDoc;
+  };
+}, [showIntro]);
 
   // --- Inputs & editable metadata ---
   const [link, setLink] = useState('');
@@ -548,7 +561,7 @@ async function runDemo() {
           <div>
             <h2 id="intro-title" className="intro-title">AI Promo Agent</h2>
             <p id="intro-desc" className="intro-sub">
-              A preview of an AI-powered promo workflow creator for music releases.
+            A production‑style prototype for music release promotion. <br />
             </p>
           </div>
         </div>
@@ -556,10 +569,12 @@ async function runDemo() {
       </div>
 
       <p className="intro-lead">
-        Shape a creative direction, generate platform-aware content, build a clean cover prompt
-        for image models, and export a tidy PDF—all in one pass.
+      This is a preview of how an AI-promo tool for music releases could feel. <br />
+          It helps you shape a creative direction, generate platform-aware content,
+          build an image prompt, and export a tidy PDF - in minutes.
+            
       </p>
-
+          <br />
       <div className="intro-how">
         <div className="label">How it works</div>
         <ul className="intro-steps">
@@ -595,6 +610,7 @@ async function runDemo() {
           </li>
         </ul>
       </div>
+      <br />
 
       <p className="intro-note">
         Tip: Click <b>Try demo</b> to auto-fill a small example project and pick three random images.
@@ -609,12 +625,21 @@ async function runDemo() {
           Explore without demo
         </button>
       </div>
+          <br />
+      <p className="intro-privacy">
+  <b>Privacy:</b> No login or accounts. We don’t store your inputs or images in a database.
+  Your brief and palette are processed in your browser and sent temporarily to our API and
+  the AI provider only to generate results. There’s no server-side persistence (just a short-lived
+  in-memory cache for performance). PDFs are generated locally in your browser.
+  Please avoid entering sensitive information.
+</p>
 
-      <p className="intro-disclaimer">
-        This test preview is provided “as is” for evaluation only. <br />
-        No warranties, express or implied.
-        Output may be inaccurate or incomplete—please review before use.
-      </p>
+<p className="intro-disclaimer">
+  This test preview is provided “as is” for evaluation only. No warranties, express or implied.
+  Output may be inaccurate or incomplete—please review before use.
+</p>
+
+
     </div>
   </div>
 )}
