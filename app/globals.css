@@ -213,7 +213,7 @@ textarea.input{ height: 110px; resize: vertical; }
   column-gap: 6px;
   align-items: center;
 }
-.pc-label{ min-width:110px; }
+.pc-label{ min-width:110px; padding: 20px}
 .pc-slider{ width:160px; accent-color: var(--brand); }
 .pc-hint-inline{ white-space: nowrap; }
 .pc-val{

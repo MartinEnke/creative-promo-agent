@@ -1,38 +1,31 @@
-
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
 // ————————————————————————————————————————————
-// Creative Promo Agent — Prompt‑Only Cover Generator (no image API)
-// Adds a rich prompt composer you can copy/paste into any image LLM.
-// Keeps all your existing curation + palette + content features.
+// Creative AI Promo Agent — Page
 // ————————————————————————————————————————————
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CreativeBrief, ImageRef, UserInput } from '@/lib/types';
 import { writeBio120, writeCaptions, writeLoglines, weekPlan } from '@/lib/ccopy';
 
+/* -------------------- small utils -------------------- */
 function cx(...c: (string | false | undefined)[]) { return c.filter(Boolean).join(' '); }
 function toList(s: string): string[] { return (s || '').split(/[|,/•·]+/).map(x => x.trim()).filter(Boolean); }
+function shuffle<T>(arr: T[]): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function sampleUnique<T>(arr: T[], n: number): T[] { return shuffle(arr).slice(0, Math.max(0, Math.min(n, arr.length))); }
 
-// Cover prompt options
+/* -------------------- types -------------------- */
 type StylePreset = 'graphic poster' | 'painterly' | 'cinematic photo' | '3D render' | 'neon collage' | 'ink & grain';
-
-// Orientation is now locked to square in the UI/logic
-// (we keep the type for prompt composition/consistency)
-type Orientation = 'auto' | 'landscape' | 'portrait' | 'square';
-
+type Orientation = 'auto' | 'landscape' | 'portrait' | 'square'; // locked to 'square' in UI
 type Goal = 'pre_save' | 'pre_sale' | 'press_kit' | 'tiktok' | 'instagram' | 'playlist_pitch';
-
-const goalLabel = (g: Goal) => ({
-  pre_sale: 'Pre-Sale',
-  pre_save: 'Pre-Save',
-  press_kit: 'Press kit',
-  instagram: 'Instagram',
-  tiktok: 'TikTok',
-  playlist_pitch: 'Playlist pitch',
-}[g]);
-
 
 type AIContent = {
   loglines: string[];
@@ -57,6 +50,9 @@ type Critique = {
   tookMs?: number;
 };
 
+/* ======================================================
+   PAGE
+   ====================================================== */
 export default function Page() {
   // --- Inputs & editable metadata ---
   const [link, setLink] = useState('');
@@ -72,7 +68,7 @@ export default function Page() {
   const [selected, setSelected] = useState<ImageRef[]>([]);
   const [palette, setPalette] = useState<string[]>([]);
 
-  // Orientation is locked to square (no UI)
+  // Orientation is UI-locked to square
   const orientation: Orientation = 'square';
 
   // --- UI state ---
@@ -143,69 +139,66 @@ export default function Page() {
     }
   }
 
-  // One-click demo
-  async function runDemo() {
-    setTitle('These Days (Don’t Make Me Wait)');
-    setArtist('Llewellyn');
-    setGenreStr('synthwave, indie pop');
-    setMoodStr('nocturnal, euphoric');
-    setThemesStr('neon city, rain, 2 AM streets');
-    setGoal('pre_sale');
-    await searchImages('neon city rain 2 AM streets');
-    setTimeout(() => {
-      const picks = images.slice(0, 2);
-      setSelected(picks);
-      extractPalette(picks.map(p => p.thumb)).then(setPalette);
-      setTimeout(() => handleExecute(), 250);
-    }, 250);
-  }
+  // Search images (returns list so callers can sample)
+  // Replace your searchImages with this version
+async function searchImages(query: string): Promise<ImageRef[]> {
+  setImgLoading(true); setMsg(null);
+  setSelected([]); setPalette([]); setExecuted(false); setAi(null); setCrit(null);
 
-  // Search based on THEMES (orientation fixed to square)
-  async function curateFromThemes() {
-    const q = toList(themesStr).join(' ');
-    if (!q) { setMsg('Add a few themes first (e.g., neon city, rain).'); return; }
-    await searchImages(q);
-  }
-
-  // ————————————————————————————————————————————
-  // Image search (square) — removed orientation filtering
-  // ————————————————————————————————————————————
-
-  const dimsCache = useRef(new Map<string, { w: number; h: number }>());
-  function getDims(img: ImageRef): Promise<{ w: number; h: number }>{
-    const key = img.thumb || img.url;
-    const cached = dimsCache.current.get(key);
-    if (cached) return Promise.resolve(cached);
-    return new Promise((resolve) => {
-      const el = new Image();
-      el.crossOrigin = 'anonymous';
-      el.onload = () => {
-        const dims = { w: el.naturalWidth || 1, h: el.naturalHeight || 1 };
-        dimsCache.current.set(key, dims);
-        resolve(dims);
-      };
-      el.onerror = () => resolve({ w: 1, h: 1 });
-      el.src = key;
-    });
-  }
-
-  async function searchImages(query: string) {
-    setImgLoading(true); setMsg(null);
-    setSelected([]); setPalette([]); setExecuted(false); setAi(null); setCrit(null);
-    const url = '/api/images?count=20&orientation=square&query=' + encodeURIComponent(query);
+  const url = '/api/images?count=20&orientation=square&query=' + encodeURIComponent(query);
+  let list: ImageRef[] = [];
+  try {
     const r = await fetch(url);
     const j = await r.json();
     if (j.error) {
-      const detail = typeof j.error === 'string' ? j.error : [j.error.provider, j.error.status, j.error.body].filter(Boolean).join(' • ');
+      const detail = typeof j.error === 'string'
+        ? j.error
+        : [j.error.provider, j.error.status, j.error.body].filter(Boolean).join(' • ');
       setImages([]); setMsg('Image search failed: ' + detail);
     } else if (!j.images || j.images.length === 0) {
       setImages([]); setMsg('No images found for this query. Try simpler terms.');
     } else {
-      const raw: ImageRef[] = j.images;
-      setImages(raw); // no orientation filtering; we crop to square in CSS
+      list = j.images as ImageRef[];
+      setImages(list);
     }
+  } catch (e: any) {
+    setImages([]); setMsg(e?.message || 'Image search failed.');
+  } finally {
     setImgLoading(false);
   }
+  return list; // <-- important
+}
+
+
+  // Curate images from THEMES (square)
+  async function curateFromThemes() {
+    const q = toList(themesStr).join(' ');
+    if (!q) { setMsg('Add a few themes first (e.g., neon, electric).'); return; }
+    await searchImages(q);
+  }
+
+
+  // One-click demo (no auto-execute; randomize 3 picks)
+async function runDemo() {
+  setTitle('These Days (Don’t Make Me Wait)');
+  setArtist('Llewellyn');
+  setGenreStr('Disco, House, Synthwave');
+  setMoodStr('warm, upbeat, feel-good');
+  setThemesStr('neon, electric, athmospheric'); // keep original wording
+
+  // Reset AI/output state
+  setAi(null); setCrit(null); setExecuted(false); setMsg(null);
+
+  const imgs = await searchImages('neon electric athmospheric');
+  if (!imgs.length) return;
+
+  const picks = [...imgs].sort(() => Math.random() - 0.5).slice(0, 3);
+  setSelected(picks);
+  extractPalette(picks.map(p => p.thumb))
+    .then(setPalette)
+    .catch(() => setPalette([]));
+}
+
 
   function toggle(img: ImageRef) {
     setSelected(prev => {
@@ -258,68 +251,45 @@ export default function Page() {
 
   function exportPDF() { exportAsPDF({ brief: workingBrief, selected, palette, ai, crit, goal }); }
 
-  /* ---------- Palette block (to be overlaid in grid) ---------- */
-  function PaletteBlock({ palette }: { palette: string[] }) {
-    return (
-      <div className="card palette-card">
-        {palette.length === 0 ? (
-          <p className="text-sm text-muted">
-            Select 1–3 images and we’ll extract a 5-color palette.
-          </p>
-        ) : (
-          <div className="swatch-row">
-            {palette.map((hex, i) => (
-              <div key={i} className="swatch" style={{ background: hex }}>
-                <span className="swatch-tag">{hex}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
   const genreChips = toList(genreStr);
   const moodChips  = toList(moodStr);
   const themeChips = toList(themesStr);
 
-  // ————————————————————————————————————————————
-  // UI
-  // ————————————————————————————————————————————
+  /* -------------------- UI -------------------- */
   return (
     <>
       {/* Header */}
-<header className="site-header">
-  <div className="container header-row">
-    <div className="brand">
-      <div className="brand-dot" />
-      <span>Creative AI Promo Agent</span>
-    </div>
-    <div className="header-actions">
-      <button className="btn-secondary" onClick={runDemo}>Try demo</button>
+      <header className="site-header">
+        <div className="container header-row">
+          <div className="brand">
+            <div className="brand-dot" />
+            <span>Creative AI Promo Agent</span>
+          </div>
+          <div className="header-actions">
+            <button className="btn-secondary" onClick={runDemo}>Try demo</button>
 
-      {/* Only active after Execute Promo Agent has run, with images + palette */}
-      <button
-        className="btn-primary btn-hero"
-        onClick={exportPDF}
-        disabled={!executed || !palette.length || !selected.length}
-        title={!executed ? 'Run “Execute Promo Agent” first' : undefined}
-        aria-disabled={!executed || !palette.length || !selected.length}
-      >
-        Export PDF
-      </button>
-    </div>
-  </div>
-</header>
+            {/* Only active after Execute Promo Agent has run, with images + palette */}
+            <button
+              className="btn-primary btn-hero"
+              onClick={exportPDF}
+              disabled={!executed || !palette.length || !selected.length}
+              title={!executed ? 'Run “Execute Promo Agent” first' : undefined}
+              aria-disabled={!executed || !palette.length || !selected.length}
+            >
+              Export PDF
+            </button>
+          </div>
+        </div>
+      </header>
 
       <main className="container page-grid">
         {/* LEFT COLUMN */}
         <section className="section">
-<div className="section-toolbar toolbar-glow is-brief">
-<SectionHead step="1" title="Brief" subtitle="Track details and creative direction." />
-</div>
+          <div className="section-toolbar toolbar-glow is-brief">
+            <SectionHead step="1" title="Brief" subtitle="Track details and creative direction." />
+          </div>
 
-          {/* Goal chips (labels updated) */}
+          {/* Goal chips */}
           <div className="group-block">
             <div className="label">Goal</div>
             <div className="chip-row">
@@ -334,20 +304,20 @@ export default function Page() {
             </div>
           </div>
 
-          {/* Link helper */}
+          {/* Track link */}
           <div className="group-block">
             <div className="label">Track link</div>
             <div className="row gap-8">
               <input value={link} onChange={e=>setLink(e.target.value)} placeholder="YouTube / Spotify / SoundCloud URL" className="input input--md" />
               <button
-  type="button"
-  className="btn-primary-soft btn-lg"
-  onClick={fetchFromLink}
-  disabled={linkLoading || !link.trim()}
-  aria-busy={linkLoading}
->
-  {linkLoading ? 'Fetching…' : 'OK'}
-</button>
+                type="button"
+                className="btn-primary-soft btn-lg"
+                onClick={fetchFromLink}
+                disabled={linkLoading || !link.trim()}
+                aria-busy={linkLoading}
+              >
+                {linkLoading ? 'Fetching…' : 'OK'}
+              </button>
             </div>
             <p className="hint">We’ll try to auto-fill Title/Artist. You can edit anytime.</p>
           </div>
@@ -372,18 +342,18 @@ export default function Page() {
               <input className="input" value={themesStr} onChange={e=>setThemesStr(e.target.value)} placeholder="Themes (comma-separated, visual)" />
               <ChipPreview items={themeChips} />
 
-              {/* Moved here: Search Images */}
+              {/* Search Images */}
               <div className="cd-search">
-  <button
-    type="button"
-    className="btn btn-primary-soft btn-pill btn-lg"
-    onClick={curateFromThemes}
-    disabled={imgLoading}
-    aria-busy={imgLoading}
-  >
-    {imgLoading ? 'Searching…' : 'Search Images'}
-  </button>
-</div>
+                <button
+                  type="button"
+                  className="btn btn-primary-soft btn-pill btn-lg"
+                  onClick={curateFromThemes}
+                  disabled={imgLoading}
+                  aria-busy={imgLoading}
+                >
+                  {imgLoading ? 'Searching…' : 'Search Images'}
+                </button>
+              </div>
               {msg && <p className="msg-error">{msg}</p>}
             </div>
           </div>
@@ -391,17 +361,17 @@ export default function Page() {
 
         {/* RIGHT COLUMN */}
         <section className="section">
-<div className="section-toolbar toolbar-glow is-exec">
-<SectionHead step="2" title="Execute & content" subtitle="Generate and refine copy for your release." />
-<div className="row gap-8">
-<span className="badge">Selected: {selected.length}</span>
-<button className="btn-primary btn-hero" onClick={handleExecute} disabled={selected.length === 0 || !palette.length || aiLoading || critLoading}>
-{(aiLoading || critLoading) ? 'Generating…' : 'Execute Promo Agent'}
-</button>
-</div>
-</div>
+          <div className="section-toolbar toolbar-glow is-exec">
+            <SectionHead step="2" title="Execute & content" subtitle="Generate and refine copy for your release." />
+            <div className="row gap-8">
+              <span className="badge">Selected: {selected.length}</span>
+              <button className="btn-primary btn-hero" onClick={handleExecute} disabled={selected.length === 0 || !palette.length || aiLoading || critLoading}>
+                {(aiLoading || critLoading) ? 'Generating…' : 'Execute Promo Agent'}
+              </button>
+            </div>
+          </div>
 
-          {/* Image grid (square) with palette overlay */}
+          {/* Image grid with palette overlay */}
           <div className="card image-card">
             {images.length === 0 ? (
               <p className="text-sm text-muted">Add themes and click “Search Images”.</p>
@@ -419,85 +389,82 @@ export default function Page() {
               </div>
             )}
             <p className="hint mt-2">Tip: pick <b>1–3 images</b> for a clean palette.</p>
-           
-            {/* Palette now lives inside the grid card, bottom-right */}
+
+            {/* Palette overlay */}
             <div className="palette-overlay">
               <PaletteBlock palette={palette} />
             </div>
           </div>
 
           {/* —— Prompt Composer —— */}
-<div className="card card--composer">
-  {/* Section label styled like .label, just a bit bigger */}
-  <div className="label label-lg pc-section-label">Build Cover Prompt</div>
-<br />
-<div className="pc-row pc-style">
-  <div className="chip-row">
-    {(['graphic poster','painterly','cinematic photo','3D render','neon collage','ink & grain'] as StylePreset[]).map(s => (
-      <button
-        key={s}
-        className={cx('chip-toggle chip-toggle--lg', style===s && 'chip-toggle--on')}
-        onClick={()=>setStyle(s)}
-      >
-        {s}
-      </button>
-    ))}
-  </div>
-</div>
+          <div className="card card--composer">
+            <div className="label label-lg pc-section-label">Build Cover Prompt</div>
+            <br />
+            <div className="pc-row pc-style">
+              <div className="chip-row">
+                {(['graphic poster','painterly','cinematic photo','3D render','neon collage','ink & grain'] as StylePreset[]).map(s => (
+                  <button
+                    key={s}
+                    className={cx('chip-toggle chip-toggle--lg', style===s && 'chip-toggle--on')}
+                    onClick={()=>setStyle(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-  <div className="pc-row">
-    <input
-      className="input"
-      placeholder="Focal subject (optional) — e.g., lone figure with umbrella, retro car, neon skyline"
-      value={focalSubject}
-      onChange={e=>setFocalSubject(e.target.value)}
-    />
-  </div>
+            <div className="pc-row">
+              <input
+                className="input"
+                placeholder="Focal subject (optional) — e.g., lone figure with umbrella, retro car, neon skyline"
+                value={focalSubject}
+                onChange={e=>setFocalSubject(e.target.value)}
+              />
+            </div>
 
-  {/* Single-line slider with inline explanation */}
-  {/* Ref Influence — single line, no layout shift */}
-  <div className="pc-row pc-range">
-  <label className="label pc-label">Ref Influence</label>
-  <input
-    type="range"
-    min={0}
-    max={100}
-    value={refStrength}
-    onChange={e=>setRefStrength(parseInt(e.target.value))}
-    className="pc-slider"
-    aria-label="Reference influence"
-  />
-  <span className="hint pc-hint-inline">
-    <span className="pc-val">{refStrength}%</span>
-    <span className="pc-expl"> — how strongly to lean on your selected refs (if the model supports it)</span>
-  </span>
-</div>
+            {/* Ref Influence — single line */}
+            <div className="pc-row pc-range">
+              <label className="label pc-label">Ref Influence</label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={refStrength}
+                onChange={e=>setRefStrength(parseInt(e.target.value))}
+                className="pc-slider"
+                aria-label="Reference influence"
+              />
+              <span className="hint pc-hint-inline">
+                <span className="pc-val">{refStrength}%</span>
+                <span className="pc-expl"> — how strongly to lean on your selected refs (if the model supports it)</span>
+              </span>
+            </div>
 
-  <textarea className="input prompt-input pc-textarea" readOnly value={prompt} />
+            <textarea className="input prompt-input pc-textarea" readOnly value={prompt} />
 
-  <div className="pc-footer">
-    <span className="hint">Aspect: <b>Square (1:1)</b>. Paste this prompt into ChatGPT, Midjourney, etc.</span>
-    <div className="pc-actions">
-  <button
-    className="btn btn-secondary btn-pill btn-lg"
-    onClick={async()=>{ await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false), 1200); }}
-  >
-    {copied ? 'Copied ✓' : 'Copy prompt'}
-  </button>
+            <div className="pc-footer">
+              <span className="hint">Aspect: <b>Square (1:1)</b>. Paste this prompt into ChatGPT, Midjourney, etc.</span>
+              <div className="pc-actions">
+                <button
+                  className="btn btn-secondary btn-pill btn-lg"
+                  onClick={async()=>{ await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false), 1200); }}
+                >
+                  {copied ? 'Copied ✓' : 'Copy prompt'}
+                </button>
 
-  <a
-    className="btn btn-secondary btn-pill btn-lg"
-    href={`data:text/plain;charset=utf-8,${encodeURIComponent(prompt)}`}
-    download={`${(workingBrief.title || 'cover').replace(/\s+/g,'_')}_prompt.txt`}
-  >
-    Download
-  </a>
-</div>
-  </div>
-</div>
+                <a
+                  className="btn btn-secondary btn-pill btn-lg"
+                  href={`data:text/plain;charset=utf-8,${encodeURIComponent(prompt)}`}
+                  download={`${(workingBrief.title || 'cover').replace(/\s+/g,'_')}_prompt.txt`}
+                >
+                  Download
+                </a>
+              </div>
+            </div>
+          </div>
 
-
-          {/* Content (smaller type) */}
+          {/* Content */}
           {executed && (palette.length > 0) && (
             <CopyPanel brief={workingBrief} ai={ai} crit={crit} />
           )}
@@ -531,11 +498,33 @@ function SectionHead({ step, title, subtitle, compact=false }: { step: string; t
     </div>
   );
 }
+
 function ChipPreview({ items }: { items: string[] }) {
   if (!items.length) return null;
   return (
     <div className="chip-row">
       {items.map((it,i)=> <span className="chip" key={i}>{it}</span>)}
+    </div>
+  );
+}
+
+/* ---------- Palette block (overlay card) ---------- */
+function PaletteBlock({ palette }: { palette: string[] }) {
+  return (
+    <div className="card palette-card">
+      {Array.isArray(palette) && palette.length > 0 ? (
+        <div className="swatch-row">
+          {palette.map((hex, i) => (
+            <div key={i} className="swatch" style={{ background: hex }}>
+              <span className="swatch-tag">{hex}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>
+          Select 1–3 images and we’ll extract a 5-color palette.
+        </p>
+      )}
     </div>
   );
 }
@@ -549,21 +538,16 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
   const captions = ai ? (winner === 'A' ? ai.captionsA : ai.captionsB) : writeCaptions(brief);
   const hasAI    = !!ai;
 
-  // OPTIONAL: rename the section title from "Loglines" to a more promo-native word:
-  const LOG_TITLE = 'Hooks'; // or 'Taglines' / 'Key Phrases'
+  const LOG_TITLE = 'Hooks'; // 'Taglines' also works
 
   return (
     <div className="card content-card content-pro">
-      {/* Box label */}
       <div className="label label-lg content-label">Content Creation</div>
 
-      {/* Group: Loglines (aka Hooks) */}
       <section className="content-group">
         <div className="content-head">
           <h4 className="content-title">{LOG_TITLE}</h4>
-          <div className="meta">
-            <span className="badge">{hasAI ? 'AI' : 'Fallback'}</span>
-          </div>
+          <div className="meta"><span className="badge">{hasAI ? 'AI' : 'Fallback'}</span></div>
         </div>
         <ul className="content-list">
           {logs.map((l, i) => <li key={i}>{l}</li>)}
@@ -572,20 +556,16 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
 
       <div className="divider" />
 
-      {/* Group: Bio */}
       <section className="content-group">
         <div className="content-head">
           <h4 className="content-title">120-word Bio</h4>
-          <div className="meta">
-            <span className="badge">{hasAI ? 'AI' : 'Fallback'}</span>
-          </div>
+          <div className="meta"><span className="badge">{hasAI ? 'AI' : 'Fallback'}</span></div>
         </div>
         <p className="content-body">{bio}</p>
       </section>
 
       <div className="divider" />
 
-      {/* Group: Captions A/B */}
       <section className="content-group">
         <div className="content-head">
           <h4 className="content-title">Captions (A/B)</h4>
@@ -596,7 +576,6 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
             {crit?.winnerReasons && <span className="meta-item">Why: {crit.winnerReasons}</span>}
           </div>
         </div>
-
         {ai ? (
           <div className="caption-grid">
             <div>
@@ -615,7 +594,6 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
 
       <div className="divider" />
 
-      {/* Group: 7-Day Plan */}
       <section className="content-group">
         <div className="content-head">
           <h4 className="content-title">7-Day Plan</h4>
@@ -624,7 +602,6 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
             {crit?.issues?.length ? <span className="badge">QA</span> : null}
           </div>
         </div>
-
         <ul className="content-list plan-list">
           {plan.map((d,i)=>(
             <li key={i}>
@@ -633,7 +610,6 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
             </li>
           ))}
         </ul>
-
         {crit?.issues?.length ? (
           <div className="qa-notes">
             <div className="qa-title">Referee notes</div>
@@ -644,7 +620,6 @@ function CopyPanel({ brief, ai, crit }: { brief: CreativeBrief; ai: AIContent | 
     </div>
   );
 }
-
 
 /* ---------- Prompt composer ---------- */
 function composeCoverPrompt({
@@ -675,31 +650,23 @@ function composeCoverPrompt({
   const ar = orientation === 'portrait' ? 'Portrait 4:5' : orientation === 'landscape' ? 'Landscape 3:2' : 'Square 1:1';
 
   return [
-    // Task
     `Design an **album cover artwork** — ${ar}. **No text, no logos, no watermarks.**`,
-    // Project context
     `Project: ${artist} — ${title}.`,
     genres && `Genre: ${genres}.`,
     moods && `Mood: ${moods}.`,
     themes && `Visual themes: ${themes}.`,
-    // Style
-    `Style: ${style}; richly lit, cohesive color grading, subtle film grain, streaming‑safe, poster‑like hierarchy with ample negative space for future typography.`,
-    // Focal + composition
+    `Style: ${style}; richly lit, cohesive color grading, subtle film grain, streaming-safe, poster-like hierarchy with ample negative space for future typography.`,
     focalSubject && `Focal subject: ${focalSubject}.`,
     `Composition: clear central focus, depth with foreground/midground/background separation; avoid busy collage unless specified.`,
-    // Palette
     hexes && `Color palette (hex, dominant first): ${hexes}. Use palette as primary grade, not just accents.`,
-    // Refs (conceptual)
     refLine,
-    // Quality & constraints
-    `Quality: high detail, natural lighting/shadows, avoid plastic sheen or generic stock‑photo look.`,
-    `Negative: text, letters, numbers, watermark, signature, logos, QR codes, UI, captions, low‑res, extra limbs, deformed hands, cut‑off faces, bad anatomy.`,
-    // Model‑hint parameters (many models ignore this but it helps users copy to various tools)
+    `Quality: high detail, natural lighting/shadows, avoid plastic sheen or generic stock-photo look.`,
+    `Negative: text, letters, numbers, watermark, signature, logos, QR codes, UI, captions, low-res, extra limbs, deformed hands, cut-off faces, bad anatomy.`,
     `Parameters (if supported): aspect=1:1; guidance=7–10; reference_strength=${refStrength}%.`,
   ].filter(Boolean).join('\n');
 }
 
-/* ---------- Palette extraction & helpers (unchanged logic) ---------- */
+/* ---------- Palette extraction & helpers ---------- */
 async function extractPalette(urls: string[], k = 5): Promise<string[]> {
   if (!urls.length) return [];
   const pixels: number[][] = [];
@@ -737,7 +704,7 @@ function kmeansColors(pixels: number[][], k: number): number[][] {
 function dist2(a:number[], b:number[]){ const dr=a[0]-b[0], dg=a[1]-b[1], db=a[2]-b[2]; return dr*dr+dg*dg+db*db; }
 function rgbToHex([r,g,b]: number[]){ return '#' + [r,g,b].map(x=> x.toString(16).padStart(2,'0')).join(''); }
 
-/* ---------- Color & contrast helpers ---------- */
+/* ---------- Color helpers ---------- */
 function roleColors(palette: string[]) {
   if (!palette.length) return { primary: '#5468ff', accent: '#ff4d6d', neutral: '#111827' };
   const withL = palette.map(hex => { const { h, s, l } = hexToHsl(hex); return { hex, h, s, l }; });
@@ -764,8 +731,7 @@ function hexToHsl(hex: string) {
 function hexToRgb(hex: string){ const v=parseInt(hex.slice(1),16); return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 }; }
 function hueDistance(a:number,b:number){ const d=Math.abs(a-b); return Math.min(d,1-d); }
 
-
-/* ---------- PDF export (final, with consistent spacing) ---------- */
+/* ---------- PDF export (already integrated with guards) ---------- */
 function exportAsPDF({
   brief, selected, palette, ai, crit, goal
 }: {
@@ -777,28 +743,19 @@ function exportAsPDF({
   goal: Goal;
 }) {
   // —— HARD GUARD ————————————————————————————————————————
-  // Require: brief, ≥1 selected image, ≥1 palette color, and AI content present
   const guardReason =
     !brief ? 'Missing brief' :
     !Array.isArray(selected) || selected.length === 0 ? 'Select at least one image' :
     !Array.isArray(palette) || palette.length === 0 ? 'Palette not ready' :
     !ai ? 'Run “Execute Promo Agent” first' :
-    ''; // OK
+    '';
+  if (guardReason) { console.warn('[exportAsPDF] blocked:', guardReason); return; }
 
-  if (guardReason) {
-    // Optional: show a toast/message if you have setMsg
-    // setMsg?.(guardReason);  // uncomment if you have setMsg in scope
-    console.warn('[exportAsPDF] blocked:', guardReason);
-    return;
-  }
-  // ————————————————————————————————————————————————
   import('jspdf').then(({ default: jsPDF }) => {
-    // Brand roles from palette (same as app)
     const roles = roleColors(palette);
     const pr = hexToRgb(roles.primary);
     const ac = hexToRgb(roles.accent);
 
-    // Doc + metrics
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const W = (doc as any).internal.pageSize.getWidth();
     const H = (doc as any).internal.pageSize.getHeight();
@@ -806,42 +763,48 @@ function exportAsPDF({
     const MAX = W - M * 2;
     let y = M;
 
-    // ---- spacing / rhythm tokens ----
+    // spacing tokens (tuned for readability)
     const SP = {
-      sectionTop: 24,        // space before Palette / Moodboard / Content
-      afterSectionHead: 14,  // NEW: gap after section underline
-      groupTop: 16,          // space before Hooks / Bio / Captions / Plan
-      afterGroupHead: 12,    // NEW: gap after group underline
+      sectionTop: 24,
+      afterSectionHead: 14,
+      groupTop: 16,
+      afterGroupHead: 12,
+      subheadTop: 10,     // before subheads like "Set A"
+      betweenSets: 14,    // gap between captions A and B
       blockGap: 12,
       line: 14
     };
     const vspace = (h = SP.blockGap) => { y += h; };
 
-    // Helpers
-    const setH = (
-      size: number = 12,
-      bold: boolean = false,
-      color: number | { r: number; g: number; b: number } = 20
-    ) => {
-      if (typeof color === 'number') doc.setTextColor(color);
-      else doc.setTextColor(color.r, color.g, color.b);
-      doc.setFont('helvetica', bold ? 'bold' : 'normal');
-      doc.setFontSize(size);
+    // helpers
+    const setH = (size=12, bold=false, color: number | {r:number;g:number;b:number}=20) => {
+      if (typeof color === 'number') (doc as any).setTextColor(color);
+      else (doc as any).setTextColor(color.r, color.g, color.b);
+      (doc as any).setFont('helvetica', bold ? 'bold' : 'normal');
+      (doc as any).setFontSize(size);
     };
-    const ensure = (need = 0) => { if (y + need > H - M) { doc.addPage(); y = M; } };
+    const ensure = (need=0) => { if (y + need > H - M) { (doc as any).addPage(); y = M; } };
     const line = (x1:number, y1:number, x2:number, y2:number, col = ac) => {
-      // @ts-ignore
-      doc.setDrawColor(col.r, col.g, col.b); doc.setLineWidth(1);
-      doc.line(x1, y1, x2, y2);
+      (doc as any).setDrawColor(col.r, col.g, col.b);
+      (doc as any).setLineWidth(1);
+      (doc as any).line(x1, y1, x2, y2);
+    };
+    const addParagraph = (t:string) => {
+      if (!t) return;
+      const clean = stripEmoji(t);
+      const lines = (doc as any).splitTextToSize(clean, MAX) as string[];
+      lines.forEach(L => { ensure(SP.line); (doc as any).text(L, M, y); y += SP.line; });
+    };
+    const addBullets = (arr:string[], max=arr.length) => {
+      arr.slice(0,max).forEach(it=>{
+        const clean = stripEmoji(it);
+        const lines = (doc as any).splitTextToSize('• ' + clean, MAX) as string[];
+        lines.forEach(L => { ensure(SP.line); (doc as any).text(L, M, y); y += SP.line; });
+      });
     };
 
-    // Badges (AI / Fallback / QA) aligned right
-    const badgeDims = (label:string) => {
-      setH(10, true);
-      const tw = (doc as any).getTextWidth(label);
-      const padX = 6, h = 16, w = tw + padX*2;
-      return { w, h, padX };
-    };
+    // badges (AI/QA) aligned right
+    const badgeDims = (label:string) => { setH(10, true); const tw=(doc as any).getTextWidth(label); const padX=6, h=16, w=tw+padX*2; return { w,h,padX }; };
     const drawBadgesRight = (labels: {text:string; tone:'brand'|'accent'|'muted'}[]) => {
       const dims = labels.map(l => badgeDims(l.text));
       const totalW = dims.reduce((s,d)=>s+d.w,0) + (labels.length-1)*6;
@@ -849,115 +812,52 @@ function exportAsPDF({
       labels.forEach((l,i)=>{
         const d = dims[i];
         const col = l.tone==='brand' ? pr : (l.tone==='accent' ? ac : {r:120,g:130,b:150});
-        // @ts-ignore
-        doc.setFillColor(col.r, col.g, col.b);
-        doc.setDrawColor(col.r, col.g, col.b);
-        doc.roundedRect(x, yy, d.w, d.h, 6, 6, 'FD');
+        (doc as any).setFillColor(col.r, col.g, col.b);
+        (doc as any).setDrawColor(col.r, col.g, col.b);
+        (doc as any).roundedRect(x, yy, d.w, d.h, 6, 6, 'FD');
         setH(10, true, 255); (doc as any).text(l.text, x + d.padX, yy + 11);
         x += d.w + 6;
       });
     };
 
-    // Labels & heads with spacing baked in
+    // section/group heads
     const sectionLabel = (text: string) => {
-      vspace(SP.sectionTop);
-      ensure(22);
-      setH(11, true, pr);
-      (doc as any).text(text.toUpperCase(), M, y);
-      y += 6;
-      line(M, y, W - M, y, pr);
-      y += SP.afterSectionHead;          // more gap after underline
-      setH(10, false, 20);
+      vspace(SP.sectionTop); ensure(22);
+      setH(11, true, pr); (doc as any).text(text.toUpperCase(), M, y); y += 6;
+      line(M, y, W - M, y, pr); y += SP.afterSectionHead; setH(10, false, 20);
     };
-    
     const addH2 = (t: string) => {
-      vspace(SP.sectionTop);
-      ensure(24);
-      setH(12, true, pr);
-      (doc as any).text(t, M, y);
-      y += 6;
-      line(M, y, W - M, y, ac);
-      y += SP.afterSectionHead;          // more gap after underline
-      setH(10, false, 20);
+      vspace(SP.sectionTop); ensure(24);
+      setH(12, true, pr); (doc as any).text(t, M, y); y += 6;
+      line(M, y, W - M, y, ac); y += SP.afterSectionHead; setH(10, false, 20);
     };
-    
-    const groupHead = (
-      title: string,
-      badges: { text: string; tone: 'brand' | 'accent' | 'muted' }[] = []
-    ) => {
-      vspace(SP.groupTop);
-      ensure(22);
-      setH(12, true, 20);
-      (doc as any).text(title, M, y);
+    const groupHead = (title: string, badges: { text: string; tone: 'brand' | 'accent' | 'muted' }[] = []) => {
+      vspace(SP.groupTop); ensure(22);
+      setH(12, true, 20); (doc as any).text(title, M, y);
       if (badges.length) drawBadgesRight(badges);
-      y += 12;
-      // hairline
-      // @ts-ignore
-      doc.setDrawColor(200); doc.setLineWidth(0.6);
-      doc.line(M, y, W - M, y);
-      y += SP.afterGroupHead;            // more gap after underline
-      setH(10, false, 20);
+      y += 12; (doc as any).setDrawColor(200); (doc as any).setLineWidth(0.6);
+      (doc as any).line(M, y, W - M, y);
+      y += SP.afterGroupHead; setH(10, false, 20);
     };
-    
-
-    const addParagraph = (t:string) => {
-      if (!t) return;
-      const lines = (doc as any).splitTextToSize(t, MAX) as string[];
-      lines.forEach(L => { ensure(SP.line); (doc as any).text(L, M, y); y += SP.line; });
-    };
-    const addBullets = (arr:string[], max=arr.length) => {
-      arr.slice(0,max).forEach(it=>{
-        const lines = (doc as any).splitTextToSize('• ' + it, MAX) as string[];
-        lines.forEach(L => { ensure(SP.line); (doc as any).text(L, M, y); y += SP.line; });
-      });
-    };
-
-    // Two-column lists for Captions A/B
-    const twoColumnLists = (leftTitle:string, left:string[], rightTitle:string, right:string[]) => {
-      const colGap = 14;
-      const colW = (MAX - colGap) / 2;
-
-      ensure(16);
+    const subHead = (t: string) => {
+      vspace(SP.subheadTop); ensure(14);
       setH(10, false, 120);
-      (doc as any).text(leftTitle, M, y);
-      (doc as any).text(rightTitle, M + colW + colGap, y);
-      y += 8; setH(10, false, 20);
-
-      let yStart = y, yL = yStart, yR = yStart;
-
-      const writeList = (items:string[], x:number, yPos:number) => {
-        items.forEach(txt=>{
-          const lines = (doc as any).splitTextToSize('• ' + txt, colW) as string[];
-          lines.forEach(L => { if (yPos + SP.line > H - M) { doc.addPage(); yPos = M; }
-            (doc as any).text(L, x, yPos); yPos += SP.line; });
-        });
-        return yPos;
-      };
-
-      yL = writeList(left, M, yL);
-      yR = writeList(right, M + colW + colGap, yR);
-
-      y = Math.max(yL, yR) + 2;
-      vspace(4);
+      (doc as any).text(t, M, y);
+      y += 10; setH(10, false, 20);
     };
 
-    /* ----------------- Title bar ----------------- */
-    setH(18, true, pr);
-    (doc as any).text('Creative Promo – ' + (brief.title || 'Untitled'), M, y);
+    /* ----------------- Title ----------------- */
+    setH(18, true, pr); (doc as any).text('Creative Promo – ' + (brief.title || 'Untitled'), M, y);
     y += 12; line(M, y, W - M, y, ac); y += 16;
-
     setH(10);
-    const metaLine = `Artist: ${brief.artist || '—'}  |  Goal: ${goal}  |  Genre: ${(brief.genre||[]).join(', ') || '—'}  |  Mood: ${(brief.mood||[]).join(', ') || '—'}  |  Themes: ${(brief.themes||[]).join(', ') || '—'}`;
-    (doc as any).text(metaLine, M, y, { maxWidth: MAX });
-    y += 8;
+    const metaLine = `Artist: ${stripEmoji(brief.artist || '—')}  |  Goal: ${goal}  |  Genre: ${stripEmoji((brief.genre||[]).join(', ') || '—')}  |  Mood: ${stripEmoji((brief.mood||[]).join(', ') || '—')}  |  Themes: ${stripEmoji((brief.themes||[]).join(', ') || '—')}`;
+    (doc as any).text(metaLine, M, y, { maxWidth: MAX }); y += 8;
 
     /* ----------------- Palette ----------------- */
     addH2('Palette');
-    const sw=24, gap=8;
-    ensure(sw + 8);
+    const sw=24, gap=8; ensure(sw + 8);
     palette.forEach((hex,i)=>{ const x=M+i*(sw+gap); const c=hexToRgb(hex);
-      // @ts-ignore
-      doc.setFillColor(c.r,c.g,c.b); doc.rect(x,y,sw,sw,'F'); doc.setDrawColor(200); doc.rect(x,y,sw,sw);
+      (doc as any).setFillColor(c.r,c.g,c.b); (doc as any).rect(x,y,sw,sw,'F'); (doc as any).setDrawColor(200); (doc as any).rect(x,y,sw,sw);
     });
     y += sw + 6; vspace(SP.blockGap);
 
@@ -970,10 +870,10 @@ function exportAsPDF({
     const startY = y; ensure(gridHeight + 10);
 
     const addImagePromises = picks.map((img, idx)=> new Promise<void>((resolve)=>{
-      const image = new Image(); image.crossOrigin='anonymous';
+      const image = new Image() as HTMLImageElement & { crossOrigin?: string };
+      image.crossOrigin='anonymous';
       image.onload=()=>{ const x = M + (idx % cols)*(iw+ig); const yy = startY + Math.floor(idx/cols)*(ih+ig);
-        // @ts-ignore
-        doc.addImage(image,'JPEG',x,yy,iw,ih,undefined,'FAST'); resolve(); };
+        (doc as any).addImage(image,'JPEG',x,yy,iw,ih,undefined,'FAST'); resolve(); };
       image.src = img.thumb;
     }));
 
@@ -984,89 +884,91 @@ function exportAsPDF({
       sectionLabel('Content Creation');
 
       const hasAI = !!ai;
-      const LOG_TITLE = 'Hooks'; // or 'Taglines'
+      const LOG_TITLE = 'Hooks';
 
-      // Hooks / Loglines
+      // Hooks
       groupHead(LOG_TITLE, [{ text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }]);
-      addBullets(ai?.loglines ?? writeLoglines(brief), 6);
+      addBullets((ai?.loglines ?? writeLoglines(brief)).map(stripEmoji), 6);
 
       // Bio
       groupHead('120-word Bio', [{ text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }]);
-      addParagraph(ai?.bio120 ?? writeBio120(brief));
+      addParagraph(stripEmoji(ai?.bio120 ?? writeBio120(brief)));
 
-      // Captions
+      // Captions — STACKED (A under B), with consistent spacing
       const winner = crit?.captionsWinner ?? 'A';
-const reason = crit?.winnerReasons || '';
-const captionBadges: { text: string; tone: 'brand' | 'accent' | 'muted' }[] = [
-  { text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }
-];
-if (crit) captionBadges.push({ text: 'QA', tone: 'accent' });
-groupHead('Captions (A/B)', captionBadges);
+      const reason = crit?.winnerReasons || '';
+      const captionBadges: { text: string; tone: 'brand' | 'accent' | 'muted' }[] = [{ text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }];
+      if (crit) captionBadges.push({ text: 'QA', tone: 'accent' });
+      groupHead('Captions (A/B)', captionBadges);
 
-vspace(6);  // NEW: breathing room between underline and winner line
+      if (ai && winner) {
+        setH(10, false, 120);
+        (doc as any).text(`Winner: ${winner}${reason ? ' — ' + stripEmoji(reason) : ''}`, M, y);
+        vspace(18); // breathing room before lists
+        setH(10, false, 20);
+      }
 
-if (ai && winner) {
-  setH(10, false, 120);
-  (doc as any).text(`Winner: ${winner}${reason ? ' — ' + reason : ''}`, M, y);
-  vspace(20);  // NEW: extra gap before the two columns
-  setH(10, false, 20);
-}
+      // Set A
+      const aTitle = `Set A${winner === 'A' ? ' • Selected' : ''}`;
+      subHead(aTitle);
+      addBullets((ai ? ai.captionsA : writeCaptions(brief)).map(stripEmoji), ai ? ai.captionsA.length : 8);
 
-if (ai) {
-  twoColumnLists(
-    `Set A${winner === 'A' ? ' • Selected' : ''}`, ai.captionsA || [],
-    `Set B${winner === 'B' ? ' • Selected' : ''}`, ai.captionsB || [],
-  );
-} else {
-  addBullets(writeCaptions(brief), 8);
-}
+      // gap between sets
+      vspace(SP.betweenSets);
+
+      // Set B
+      const bTitle = `Set B${winner === 'B' ? ' • Selected' : ''}`;
+      subHead(bTitle);
+      if (ai) {
+        addBullets(ai.captionsB.map(stripEmoji), ai.captionsB.length);
+      } else {
+        // fallback already shown above; keep B empty in pure fallback scenario
+      }
 
       // 7-Day Plan
-      const planBadges: {text:string;tone:'brand'|'accent'|'muted'}[] = [
-        { text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }
-      ];
+      const planBadges: {text:string;tone:'brand'|'accent'|'muted'}[] = [{ text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }];
       if (crit?.issues?.length) planBadges.push({ text: 'QA', tone: 'accent' });
       groupHead('7-Day Plan', planBadges);
 
       const plan = ai?.plan ?? weekPlan(brief);
       plan.forEach(d=>{
-        const lineTxt = `${d.day}: ${d.idea} — ${d.hook}`;
+        const lineTxt = stripEmoji(`${d.day}: ${d.idea} — ${d.hook}`);
         const lines = (doc as any).splitTextToSize(lineTxt, MAX) as string[];
         lines.forEach(L=>{ ensure(SP.line); (doc as any).text(L, M, y); y += SP.line; });
       });
 
       // QA notes (optional)
       if (crit?.issues?.length) {
-        vspace(6);
-        // @ts-ignore
-        doc.setDrawColor(200); doc.setLineWidth(0.6);
-        doc.line(M, y, W-M, y); vspace(8);
-
-        setH(11, true, 20);
-        (doc as any).text('Referee notes', M, y); vspace(10);
+        vspace(6); (doc as any).setDrawColor(200); (doc as any).setLineWidth(0.6);
+        (doc as any).line(M, y, W-M, y); vspace(8);
+        setH(11, true, 20); (doc as any).text('Referee notes', M, y); vspace(10);
         setH(10, false, 20);
-        addBullets(crit.issues);
+        addBullets(crit.issues.map(stripEmoji));
       }
 
       /* ----------------- Appendix ----------------- */
-      doc.addPage(); y = M;
+      (doc as any).addPage(); y = M;
       addH2('Appendix: Inputs & QA');
       addParagraph(`Goal: ${goal}`);
-      addParagraph(`Title: ${brief.title} | Artist: ${brief.artist}`);
-      addParagraph(`Genre: ${brief.genre.join(', ')} | Mood: ${brief.mood.join(', ')} | Themes: ${brief.themes.join(', ')}`);
+      addParagraph(`Title: ${stripEmoji(brief.title)} | Artist: ${stripEmoji(brief.artist)}`);
+      addParagraph(`Genre: ${stripEmoji(brief.genre.join(', '))} | Mood: ${stripEmoji(brief.mood.join(', '))} | Themes: ${stripEmoji(brief.themes.join(', '))}`);
       if (crit) {
-        addParagraph(`QA score: ${crit.score}/10 · Winner: ${crit.captionsWinner} (${crit.winnerReasons || '—'})`);
-        if (crit.issues?.length) addBullets(crit.issues);
-        if (crit.suggestions?.length) addBullets(crit.suggestions);
+        addParagraph(`QA score: ${crit.score}/10 · Winner: ${crit.captionsWinner} (${stripEmoji(crit.winnerReasons || '—')})`);
+        if (crit.issues?.length) addBullets(crit.issues.map(stripEmoji));
+        if (crit.suggestions?.length) addBullets(crit.suggestions.map(stripEmoji));
       }
 
-      // Image attributions
       const attr = picks.map(s=> s.attribution).join('  •  ');
-      setH(8, false, 120);
-      addParagraph(attr.substring(0, 1200));
+      setH(8, false, 120); addParagraph(attr.substring(0, 1200));
       setH(10, false, 20);
 
-      doc.save(`${(brief.title || 'promo').replace(/\s+/g,'_')}_promo.pdf`);
+      (doc as any).save(`${(brief.title || 'promo').replace(/\s+/g,'_')}_promo.pdf`);
     });
   });
+}
+
+// Remove emojis for PDF safety/readability
+function stripEmoji(s: string): string {
+  if (!s) return s;
+  return s.replace(/[\p{Extended_Pictographic}\p{Emoji}\uFE0F]/gu, '');
 }
