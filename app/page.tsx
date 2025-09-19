@@ -54,6 +54,34 @@ type Critique = {
    PAGE
    ====================================================== */
 export default function Page() {
+
+
+// 1) State: show by default on every load
+const [showIntro, setShowIntro] = useState(true);
+
+// 2) Small helpers
+function dismissIntro() { setShowIntro(false); }
+async function startDemoFromIntro() { setShowIntro(false); await runDemo(); }
+
+// 3) Accessibility niceties (ESC to close + lock scroll while open)
+useEffect(() => {
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowIntro(false); };
+  if (showIntro) window.addEventListener('keydown', onKey);
+  document.body.style.overflow = showIntro ? 'hidden' : '';
+  return () => {
+    window.removeEventListener('keydown', onKey);
+    document.body.style.overflow = '';
+  };
+}, [showIntro]);
+
+// 4) (Optional) allow ?intro=0 to start without the panel
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('intro') === '0') setShowIntro(false);
+}, []);
+
+
+
   // --- Inputs & editable metadata ---
   const [link, setLink] = useState('');
   const [title, setTitle] = useState('');
@@ -491,6 +519,94 @@ async function runDemo() {
           </div>
         </div>
       </footer>
+
+
+      {showIntro && (
+  <div
+    className="intro-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="intro-title"
+    onClick={(e) => { if (e.target === e.currentTarget) dismissIntro(); }}
+  >
+    <div className="intro-card intro-card--lg card">
+      <div className="intro-head">
+        <div className="intro-brand">
+          <span className="brand-dot brand-dot--lg" aria-hidden="true" />
+          <div>
+            <h2 id="intro-title" className="intro-title">AI Promo Agent</h2>
+            <p id="intro-desc" className="intro-sub">
+              A preview of an AI-powered promo workflow creator for music releases.
+            </p>
+          </div>
+        </div>
+        <span className="badge">Preview</span>
+      </div>
+
+      <p className="intro-lead">
+        Shape a creative direction, generate platform-aware content, build a clean cover prompt
+        for image models, and export a tidy PDF—all in one pass.
+      </p>
+
+      <div className="intro-how">
+        <div className="label">How it works</div>
+        <ul className="intro-steps">
+          <li>
+            <span className="step-no">1</span>
+            <div className="step-text">
+              <b>Brief:</b> paste a track link or enter Title/Artist; add <i>Genre</i>, <i>Mood</i>, and <i>Themes</i>.
+            </div>
+          </li>
+          <li>
+            <span className="step-no">2</span>
+            <div className="step-text">
+              <b>Curate:</b> click <b>Search Images</b> and select 1–3 references to set the palette.
+            </div>
+          </li>
+          <li>
+            <span className="step-no">3</span>
+            <div className="step-text">
+              <b>Execute:</b> run <b>Execute Promo Agent</b> to generate hooks, bio, captions A/B, and a 7-day plan.
+            </div>
+          </li>
+          <li>
+            <span className="step-no">4</span>
+            <div className="step-text">
+              <b>Export:</b> when ready, use <b>Export PDF</b> for a shareable document.
+            </div>
+          </li>
+          <li>
+            <span className="step-no">5</span>
+            <div className="step-text">
+              <b>Cover Prompt:</b> copy the prompt and paste it into your preferred image model.
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <p className="intro-note">
+        Tip: Click <b>Try demo</b> to auto-fill a small example project and pick three random images.
+        Then press <b>Execute Promo Agent</b>.
+      </p>
+
+      <div className="row gap-8 intro-actions">
+        <button className="btn-primary btn-hero header-btn" onClick={startDemoFromIntro}>
+          Try demo
+        </button>
+        <button className="btn-secondary header-btn" onClick={dismissIntro}>
+          Explore without demo
+        </button>
+      </div>
+
+      <p className="intro-disclaimer">
+        This test preview is provided “as is” for evaluation only. No warranties, express or implied.
+        Output may be inaccurate or incomplete—please review before use.
+      </p>
+    </div>
+  </div>
+)}
+
+
     </>
   );
 }
