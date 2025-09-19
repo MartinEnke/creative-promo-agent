@@ -363,17 +363,17 @@ export default function Page() {
               <ChipPreview items={themeChips} />
 
               {/* Moved here: Search Images */}
-              <div className="row gap-8">
-              <button
-  type="button"
-  className="btn-primary-soft btn-lg"
-  onClick={curateFromThemes}
-  disabled={imgLoading}
-  aria-busy={imgLoading}
->
-  {imgLoading ? 'Searching…' : 'Search Images'}
-</button>
-              </div>
+              <div className="cd-search">
+  <button
+    type="button"
+    className="btn btn-primary-soft btn-pill btn-lg"
+    onClick={curateFromThemes}
+    disabled={imgLoading}
+    aria-busy={imgLoading}
+  >
+    {imgLoading ? 'Searching…' : 'Search Images'}
+  </button>
+</div>
               {msg && <p className="msg-error">{msg}</p>}
             </div>
           </div>
@@ -409,7 +409,7 @@ export default function Page() {
               </div>
             )}
             <p className="hint mt-2">Tip: pick <b>1–3 images</b> for a clean palette.</p>
-
+           
             {/* Palette now lives inside the grid card, bottom-right */}
             <div className="palette-overlay">
               <PaletteBlock palette={palette} />
@@ -417,32 +417,75 @@ export default function Page() {
           </div>
 
           {/* —— Prompt Composer —— */}
-          <div className="card">
-            <h4 className="content-h" style={{marginBottom:8}}>Cover prompt (copy & paste into your image model)</h4>
-            <div className="row wrap gap-8" style={{marginBottom:8}}>
-              <div className="chip-row">
-                {(['graphic poster','painterly','cinematic photo','3D render','neon collage','ink & grain'] as StylePreset[]).map(s => (
-                  <button key={s} className={cx('chip-toggle', style===s && 'chip-toggle--on')} onClick={()=>setStyle(s)}>{s}</button>
-                ))}
-              </div>
-            </div>
-            <div className="row wrap gap-8" style={{marginBottom:8}}>
-              <input className="input" placeholder="Focal subject (optional) — e.g., lone figure with umbrella, retro car, neon skyline" value={focalSubject} onChange={e=>setFocalSubject(e.target.value)} />
-            </div>
-            <div className="row wrap gap-8" style={{marginBottom:8}}>
-              <label className="label" style={{minWidth:120}}>Ref influence</label>
-              <input type="range" min={0} max={100} value={refStrength} onChange={e=>setRefStrength(parseInt(e.target.value))} />
-              <span className="hint">{refStrength}% — how strongly to lean on your selected refs (if the model supports it)</span>
-            </div>
-            <textarea className="input prompt-input" readOnly value={prompt} />
-            <div className="row gap-8" style={{justifyContent:'space-between', marginTop:8}}>
-              <span className="hint">Aspect: <b>Square (1:1)</b>. Paste this prompt into ChatGPT, Midjourney, etc.</span>
-              <div className="row gap-8">
-                <button className="btn-secondary" onClick={async()=>{ await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false), 1200); }}>{copied ? 'Copied ✓' : 'Copy prompt'}</button>
-                <a className="btn-secondary" href={`data:text/plain;charset=utf-8,${encodeURIComponent(prompt)}`} download={`${(workingBrief.title || 'cover').replace(/\s+/g,'_')}_prompt.txt`}>Download .txt</a>
-              </div>
-            </div>
-          </div>
+<div className="card card--composer">
+  {/* Section label styled like .label, just a bit bigger */}
+  <div className="label label-lg pc-section-label">Build Cover Prompt</div>
+<br />
+<div className="pc-row pc-style">
+  <div className="chip-row">
+    {(['graphic poster','painterly','cinematic photo','3D render','neon collage','ink & grain'] as StylePreset[]).map(s => (
+      <button
+        key={s}
+        className={cx('chip-toggle chip-toggle--lg', style===s && 'chip-toggle--on')}
+        onClick={()=>setStyle(s)}
+      >
+        {s}
+      </button>
+    ))}
+  </div>
+</div>
+
+  <div className="pc-row">
+    <input
+      className="input"
+      placeholder="Focal subject (optional) — e.g., lone figure with umbrella, retro car, neon skyline"
+      value={focalSubject}
+      onChange={e=>setFocalSubject(e.target.value)}
+    />
+  </div>
+
+  {/* Single-line slider with inline explanation */}
+  {/* Ref Influence — single line, no layout shift */}
+  <div className="pc-row pc-range">
+  <label className="label pc-label">Ref Influence</label>
+  <input
+    type="range"
+    min={0}
+    max={100}
+    value={refStrength}
+    onChange={e=>setRefStrength(parseInt(e.target.value))}
+    className="pc-slider"
+    aria-label="Reference influence"
+  />
+  <span className="hint pc-hint-inline">
+    <span className="pc-val">{refStrength}%</span>
+    <span className="pc-expl"> — how strongly to lean on your selected refs (if the model supports it)</span>
+  </span>
+</div>
+
+  <textarea className="input prompt-input pc-textarea" readOnly value={prompt} />
+
+  <div className="pc-footer">
+    <span className="hint">Aspect: <b>Square (1:1)</b>. Paste this prompt into ChatGPT, Midjourney, etc.</span>
+    <div className="pc-actions">
+  <button
+    className="btn btn-secondary btn-pill btn-lg"
+    onClick={async()=>{ await navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(()=>setCopied(false), 1200); }}
+  >
+    {copied ? 'Copied ✓' : 'Copy prompt'}
+  </button>
+
+  <a
+    className="btn btn-secondary btn-pill btn-lg"
+    href={`data:text/plain;charset=utf-8,${encodeURIComponent(prompt)}`}
+    download={`${(workingBrief.title || 'cover').replace(/\s+/g,'_')}_prompt.txt`}
+  >
+    Download
+  </a>
+</div>
+  </div>
+</div>
+
 
           {/* Content (smaller type) */}
           {executed && (palette.length > 0) && (
