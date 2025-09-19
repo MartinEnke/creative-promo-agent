@@ -55,6 +55,19 @@ type Critique = {
    ====================================================== */
 export default function Page() {
 
+  // inside Page() component
+const CLEAR_QUERY_ON_REFRESH = true; // set false if you want to keep ?intro=0 etc.
+
+function refreshApp() {
+  if (CLEAR_QUERY_ON_REFRESH) {
+    // "Clean" reload (drops any query/hash so the intro shows again)
+    window.location.href = window.location.pathname;
+  } else {
+    // Hard reload, keeps current URL
+    window.location.reload();
+  }
+}
+
 
 // 1) State: show by default on every load
 const [showIntro, setShowIntro] = useState(true);
@@ -289,23 +302,22 @@ async function runDemo() {
       {/* Header */}
       <header className="site-header">
   <div className="container header-row">
-    <div className="brand">
+    {/* Brand acts as a refresh button */}
+    <button
+      type="button"
+      className="brand brand-btn"
+      onClick={refreshApp}
+      aria-label="Refresh"
+      title="Refresh"
+    >
       <div className="brand-dot" />
       <span>AI Promo Agent</span>
-    </div>
+    </button>
 
     <div className="header-actions">
+      <button className="btn-secondary header-btn" onClick={runDemo}>Try demo</button>
       <button
-        type="button"
-        className="btn btn-primary-soft btn-pill header-btn"
-        onClick={runDemo}
-      >
-        Try demo
-      </button>
-
-      <button
-        type="button"
-        className="btn btn-primary btn-pill header-btn"
+        className="btn-primary btn-hero header-btn"
         onClick={exportPDF}
         disabled={!executed || !palette.length || !selected.length}
         title={!executed ? 'Run “Execute Promo Agent” first' : undefined}
@@ -599,7 +611,8 @@ async function runDemo() {
       </div>
 
       <p className="intro-disclaimer">
-        This test preview is provided “as is” for evaluation only. No warranties, express or implied.
+        This test preview is provided “as is” for evaluation only. <br />
+        No warranties, express or implied.
         Output may be inaccurate or incomplete—please review before use.
       </p>
     </div>
