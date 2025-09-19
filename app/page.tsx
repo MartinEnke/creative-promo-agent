@@ -289,18 +289,28 @@ export default function Page() {
   return (
     <>
       {/* Header */}
-      <header className="site-header">
-        <div className="container header-row">
-          <div className="brand">
-            <div className="brand-dot" />
-            <span>Creative AI Promo Agent</span>
-          </div>
-          <div className="header-actions">
-            <button className="btn-secondary" onClick={runDemo}>Try demo</button>
-            <button className="btn-primary btn-hero" onClick={exportPDF} disabled={!palette.length || !selected.length}>Export PDF</button>
-          </div>
-        </div>
-      </header>
+<header className="site-header">
+  <div className="container header-row">
+    <div className="brand">
+      <div className="brand-dot" />
+      <span>Creative AI Promo Agent</span>
+    </div>
+    <div className="header-actions">
+      <button className="btn-secondary" onClick={runDemo}>Try demo</button>
+
+      {/* Only active after Execute Promo Agent has run, with images + palette */}
+      <button
+        className="btn-primary btn-hero"
+        onClick={exportPDF}
+        disabled={!executed || !palette.length || !selected.length}
+        title={!executed ? 'Run “Execute Promo Agent” first' : undefined}
+        aria-disabled={!executed || !palette.length || !selected.length}
+      >
+        Export PDF
+      </button>
+    </div>
+  </div>
+</header>
 
       <main className="container page-grid">
         {/* LEFT COLUMN */}
@@ -766,7 +776,22 @@ function exportAsPDF({
   crit?: Critique | null;
   goal: Goal;
 }) {
-  if (!brief) return;
+  // —— HARD GUARD ————————————————————————————————————————
+  // Require: brief, ≥1 selected image, ≥1 palette color, and AI content present
+  const guardReason =
+    !brief ? 'Missing brief' :
+    !Array.isArray(selected) || selected.length === 0 ? 'Select at least one image' :
+    !Array.isArray(palette) || palette.length === 0 ? 'Palette not ready' :
+    !ai ? 'Run “Execute Promo Agent” first' :
+    ''; // OK
+
+  if (guardReason) {
+    // Optional: show a toast/message if you have setMsg
+    // setMsg?.(guardReason);  // uncomment if you have setMsg in scope
+    console.warn('[exportAsPDF] blocked:', guardReason);
+    return;
+  }
+  // ————————————————————————————————————————————————
   import('jspdf').then(({ default: jsPDF }) => {
     // Brand roles from palette (same as app)
     const roles = roleColors(palette);
