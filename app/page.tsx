@@ -497,7 +497,7 @@ export default function Page() {
       {/* Footer */}
       <footer className="site-footer">
         <div className="container footer-row">
-          <span className="text-muted">© 2025 Creative Promo Agent</span>
+          <span className="text-muted">© 2025 Creative AI Promo Agent</span>
           <div className="footer-links">
             <a href="#" className="text-muted">Docs</a>
             <a href="#" className="text-muted">Changelog</a>
@@ -754,7 +754,8 @@ function hexToHsl(hex: string) {
 function hexToRgb(hex: string){ const v=parseInt(hex.slice(1),16); return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 }; }
 function hueDistance(a:number,b:number){ const d=Math.abs(a-b); return Math.min(d,1-d); }
 
-/* ---------- PDF export (updated to show friendly goal label) ---------- */
+
+/* ---------- PDF export (final, with consistent spacing) ---------- */
 function exportAsPDF({
   brief, selected, palette, ai, crit, goal
 }: {
@@ -767,50 +768,175 @@ function exportAsPDF({
 }) {
   if (!brief) return;
   import('jspdf').then(({ default: jsPDF }) => {
+    // Brand roles from palette (same as app)
     const roles = roleColors(palette);
-    const doc = new jsPDF({ unit:'pt', format:'a4' });
-    const W = (doc as any).internal.pageSize.getWidth();
-    const H = (doc as any).internal.pageSize.getHeight();
-    const M = 40, MAX = W - M*2, LH = 14;
-    let y = M;
-
     const pr = hexToRgb(roles.primary);
     const ac = hexToRgb(roles.accent);
-    const ensure = (need=0)=>{ if (y+need > H-M){ doc.addPage(); y = M; } };
-    const addH2 = (t:string)=>{ ensure(LH*2);
-      // @ts-ignore
-      doc.setTextColor(pr.r,pr.g,pr.b);
-      doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(t,M,y);
-      y+=6; // @ts-ignore
-      doc.setDrawColor(ac.r,ac.g,ac.b); doc.setLineWidth(1); doc.line(M,y,W-M,y); y+=10;
-      doc.setTextColor(20); doc.setFont('helvetica','normal'); doc.setFontSize(10);
+
+    // Doc + metrics
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const W = (doc as any).internal.pageSize.getWidth();
+    const H = (doc as any).internal.pageSize.getHeight();
+    const M = 40;
+    const MAX = W - M * 2;
+    let y = M;
+
+    // ---- spacing / rhythm tokens ----
+    const SP = {
+      sectionTop: 24,        // space before Palette / Moodboard / Content
+      afterSectionHead: 14,  // NEW: gap after section underline
+      groupTop: 16,          // space before Hooks / Bio / Captions / Plan
+      afterGroupHead: 12,    // NEW: gap after group underline
+      blockGap: 12,
+      line: 14
     };
-    const addParagraph = (t:string)=>{ if(!t) return; const lines=(doc as any).splitTextToSize(t,MAX) as string[];
-      for(const line of lines){ ensure(LH); doc.text(line,M,y); y+=LH; } y+=4; };
-    const addBullets=(arr:string[],max=arr.length)=>{ for(const it of arr.slice(0,max)){ const lines=(doc as any).splitTextToSize('• '+it,MAX) as string[];
-      for(const l of lines){ ensure(LH); doc.text(l,M,y); y+=LH; } } y+=4; };
+    const vspace = (h = SP.blockGap) => { y += h; };
 
-    // Title
-    // @ts-ignore
-    doc.setTextColor(pr.r,pr.g,pr.b);
-    doc.setFont('helvetica','bold'); doc.setFontSize(18);
-    doc.text('Creative Promo – ' + (brief.title || 'Untitled'), M, y);
-    doc.setTextColor(20);
-    y += 12; // @ts-ignore
-    doc.setDrawColor(ac.r,ac.g,ac.b); doc.setLineWidth(2); doc.line(M,y,W-M,y);
-    y += 16;
-    doc.setFont('helvetica','normal'); doc.setFontSize(10);
-    doc.text(`Artist: ${brief.artist || '—'}  |  Goal: ${goalLabel(goal)}  |  Genre: ${(brief.genre||[]).join(', ') || '—'}  |  Mood: ${(brief.mood||[]).join(', ') || '—'}  |  Themes: ${(brief.themes||[]).join(', ') || '—'}`, M, y, { maxWidth: MAX });
+    // Helpers
+    const setH = (
+      size: number = 12,
+      bold: boolean = false,
+      color: number | { r: number; g: number; b: number } = 20
+    ) => {
+      if (typeof color === 'number') doc.setTextColor(color);
+      else doc.setTextColor(color.r, color.g, color.b);
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(size);
+    };
+    const ensure = (need = 0) => { if (y + need > H - M) { doc.addPage(); y = M; } };
+    const line = (x1:number, y1:number, x2:number, y2:number, col = ac) => {
+      // @ts-ignore
+      doc.setDrawColor(col.r, col.g, col.b); doc.setLineWidth(1);
+      doc.line(x1, y1, x2, y2);
+    };
 
-    // Palette
-    y += 24; addH2('Palette');
-    const sw=24, gap=8; ensure(sw+8);
+    // Badges (AI / Fallback / QA) aligned right
+    const badgeDims = (label:string) => {
+      setH(10, true);
+      const tw = (doc as any).getTextWidth(label);
+      const padX = 6, h = 16, w = tw + padX*2;
+      return { w, h, padX };
+    };
+    const drawBadgesRight = (labels: {text:string; tone:'brand'|'accent'|'muted'}[]) => {
+      const dims = labels.map(l => badgeDims(l.text));
+      const totalW = dims.reduce((s,d)=>s+d.w,0) + (labels.length-1)*6;
+      let x = M + MAX - totalW, yy = y - 12;
+      labels.forEach((l,i)=>{
+        const d = dims[i];
+        const col = l.tone==='brand' ? pr : (l.tone==='accent' ? ac : {r:120,g:130,b:150});
+        // @ts-ignore
+        doc.setFillColor(col.r, col.g, col.b);
+        doc.setDrawColor(col.r, col.g, col.b);
+        doc.roundedRect(x, yy, d.w, d.h, 6, 6, 'FD');
+        setH(10, true, 255); (doc as any).text(l.text, x + d.padX, yy + 11);
+        x += d.w + 6;
+      });
+    };
+
+    // Labels & heads with spacing baked in
+    const sectionLabel = (text: string) => {
+      vspace(SP.sectionTop);
+      ensure(22);
+      setH(11, true, pr);
+      (doc as any).text(text.toUpperCase(), M, y);
+      y += 6;
+      line(M, y, W - M, y, pr);
+      y += SP.afterSectionHead;          // more gap after underline
+      setH(10, false, 20);
+    };
+    
+    const addH2 = (t: string) => {
+      vspace(SP.sectionTop);
+      ensure(24);
+      setH(12, true, pr);
+      (doc as any).text(t, M, y);
+      y += 6;
+      line(M, y, W - M, y, ac);
+      y += SP.afterSectionHead;          // more gap after underline
+      setH(10, false, 20);
+    };
+    
+    const groupHead = (
+      title: string,
+      badges: { text: string; tone: 'brand' | 'accent' | 'muted' }[] = []
+    ) => {
+      vspace(SP.groupTop);
+      ensure(22);
+      setH(12, true, 20);
+      (doc as any).text(title, M, y);
+      if (badges.length) drawBadgesRight(badges);
+      y += 12;
+      // hairline
+      // @ts-ignore
+      doc.setDrawColor(200); doc.setLineWidth(0.6);
+      doc.line(M, y, W - M, y);
+      y += SP.afterGroupHead;            // more gap after underline
+      setH(10, false, 20);
+    };
+    
+
+    const addParagraph = (t:string) => {
+      if (!t) return;
+      const lines = (doc as any).splitTextToSize(t, MAX) as string[];
+      lines.forEach(L => { ensure(SP.line); (doc as any).text(L, M, y); y += SP.line; });
+    };
+    const addBullets = (arr:string[], max=arr.length) => {
+      arr.slice(0,max).forEach(it=>{
+        const lines = (doc as any).splitTextToSize('• ' + it, MAX) as string[];
+        lines.forEach(L => { ensure(SP.line); (doc as any).text(L, M, y); y += SP.line; });
+      });
+    };
+
+    // Two-column lists for Captions A/B
+    const twoColumnLists = (leftTitle:string, left:string[], rightTitle:string, right:string[]) => {
+      const colGap = 14;
+      const colW = (MAX - colGap) / 2;
+
+      ensure(16);
+      setH(10, false, 120);
+      (doc as any).text(leftTitle, M, y);
+      (doc as any).text(rightTitle, M + colW + colGap, y);
+      y += 8; setH(10, false, 20);
+
+      let yStart = y, yL = yStart, yR = yStart;
+
+      const writeList = (items:string[], x:number, yPos:number) => {
+        items.forEach(txt=>{
+          const lines = (doc as any).splitTextToSize('• ' + txt, colW) as string[];
+          lines.forEach(L => { if (yPos + SP.line > H - M) { doc.addPage(); yPos = M; }
+            (doc as any).text(L, x, yPos); yPos += SP.line; });
+        });
+        return yPos;
+      };
+
+      yL = writeList(left, M, yL);
+      yR = writeList(right, M + colW + colGap, yR);
+
+      y = Math.max(yL, yR) + 2;
+      vspace(4);
+    };
+
+    /* ----------------- Title bar ----------------- */
+    setH(18, true, pr);
+    (doc as any).text('Creative Promo – ' + (brief.title || 'Untitled'), M, y);
+    y += 12; line(M, y, W - M, y, ac); y += 16;
+
+    setH(10);
+    const metaLine = `Artist: ${brief.artist || '—'}  |  Goal: ${goal}  |  Genre: ${(brief.genre||[]).join(', ') || '—'}  |  Mood: ${(brief.mood||[]).join(', ') || '—'}  |  Themes: ${(brief.themes||[]).join(', ') || '—'}`;
+    (doc as any).text(metaLine, M, y, { maxWidth: MAX });
+    y += 8;
+
+    /* ----------------- Palette ----------------- */
+    addH2('Palette');
+    const sw=24, gap=8;
+    ensure(sw + 8);
     palette.forEach((hex,i)=>{ const x=M+i*(sw+gap); const c=hexToRgb(hex);
       // @ts-ignore
-      doc.setFillColor(c.r,c.g,c.b); doc.rect(x,y,sw,sw,'F'); doc.setDrawColor(200); doc.rect(x,y,sw,sw); });
-    y += sw + 12;
+      doc.setFillColor(c.r,c.g,c.b); doc.rect(x,y,sw,sw,'F'); doc.setDrawColor(200); doc.rect(x,y,sw,sw);
+    });
+    y += sw + 6; vspace(SP.blockGap);
 
-    // Moodboard
+    /* ----------------- Moodboard ----------------- */
     addH2('Moodboard');
     const cols=4, iw=110, ih=72, ig=10;
     const picks = selected.slice(0,12);
@@ -827,35 +953,80 @@ function exportAsPDF({
     }));
 
     Promise.all(addImagePromises).then(()=>{
-      y = startY + gridHeight + 14;
+      y = startY + gridHeight + 6; vspace(SP.blockGap);
 
-      // Content
-      addH2('Content');
-      const logs = ai?.loglines ?? writeLoglines(brief);
-      const bio  = ai?.bio120  ?? writeBio120(brief);
+      /* ----------------- CONTENT CREATION ----------------- */
+      sectionLabel('Content Creation');
+
+      const hasAI = !!ai;
+      const LOG_TITLE = 'Hooks'; // or 'Taglines'
+
+      // Hooks / Loglines
+      groupHead(LOG_TITLE, [{ text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }]);
+      addBullets(ai?.loglines ?? writeLoglines(brief), 6);
+
+      // Bio
+      groupHead('120-word Bio', [{ text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }]);
+      addParagraph(ai?.bio120 ?? writeBio120(brief));
+
+      // Captions
       const winner = crit?.captionsWinner ?? 'A';
-      const captions = ai ? (winner==='A' ? ai.captionsA : ai.captionsB) : writeCaptions(brief);
+const reason = crit?.winnerReasons || '';
+const captionBadges: { text: string; tone: 'brand' | 'accent' | 'muted' }[] = [
+  { text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }
+];
+if (crit) captionBadges.push({ text: 'QA', tone: 'accent' });
+groupHead('Captions (A/B)', captionBadges);
+
+vspace(6);  // NEW: breathing room between underline and winner line
+
+if (ai && winner) {
+  setH(10, false, 120);
+  (doc as any).text(`Winner: ${winner}${reason ? ' — ' + reason : ''}`, M, y);
+  vspace(20);  // NEW: extra gap before the two columns
+  setH(10, false, 20);
+}
+
+if (ai) {
+  twoColumnLists(
+    `Set A${winner === 'A' ? ' • Selected' : ''}`, ai.captionsA || [],
+    `Set B${winner === 'B' ? ' • Selected' : ''}`, ai.captionsB || [],
+  );
+} else {
+  addBullets(writeCaptions(brief), 8);
+}
+
+      // 7-Day Plan
+      const planBadges: {text:string;tone:'brand'|'accent'|'muted'}[] = [
+        { text: hasAI ? 'AI' : 'Fallback', tone: 'brand' }
+      ];
+      if (crit?.issues?.length) planBadges.push({ text: 'QA', tone: 'accent' });
+      groupHead('7-Day Plan', planBadges);
+
       const plan = ai?.plan ?? weekPlan(brief);
+      plan.forEach(d=>{
+        const lineTxt = `${d.day}: ${d.idea} — ${d.hook}`;
+        const lines = (doc as any).splitTextToSize(lineTxt, MAX) as string[];
+        lines.forEach(L=>{ ensure(SP.line); (doc as any).text(L, M, y); y += SP.line; });
+      });
 
-      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text('Loglines', M, y); y+=8;
-      doc.setFont('helvetica','normal'); doc.setFontSize(10); addBullets(logs, 5);
+      // QA notes (optional)
+      if (crit?.issues?.length) {
+        vspace(6);
+        // @ts-ignore
+        doc.setDrawColor(200); doc.setLineWidth(0.6);
+        doc.line(M, y, W-M, y); vspace(8);
 
-      doc.setFont('helvetica','bold'); doc.setFontSize(11); ensure(LH*2); doc.text('120-word Bio', M, y); y+=8;
-      doc.setFont('helvetica','normal'); doc.setFontSize(10); addParagraph(bio);
+        setH(11, true, 20);
+        (doc as any).text('Referee notes', M, y); vspace(10);
+        setH(10, false, 20);
+        addBullets(crit.issues);
+      }
 
-      doc.setFont('helvetica','bold'); doc.setFontSize(11); ensure(LH*2); doc.text(`Captions (${winner})`, M, y); y+=8;
-      doc.setFont('helvetica','normal'); doc.setFontSize(10); addBullets(captions, 6);
-
-      doc.setFont('helvetica','bold'); doc.setFontSize(11); ensure(LH*2); doc.text('7-Day Plan', M, y); y+=8;
-      doc.setFont('helvetica','normal'); doc.setFontSize(10);
-      for (const d of plan){ const line=`${d.day}: ${d.idea} — ${d.hook}`; const lines=(doc as any).splitTextToSize(line,MAX) as string[];
-        for (const l of lines){ ensure(LH); doc.text(l,M,y); y+=LH; } } y+=6;
-
-      // Appendix
+      /* ----------------- Appendix ----------------- */
       doc.addPage(); y = M;
-      const addH2_ = addH2; // silence TS
-      addH2_('Appendix: Inputs & QA');
-      addParagraph(`Goal: ${goalLabel(goal)}`);
+      addH2('Appendix: Inputs & QA');
+      addParagraph(`Goal: ${goal}`);
       addParagraph(`Title: ${brief.title} | Artist: ${brief.artist}`);
       addParagraph(`Genre: ${brief.genre.join(', ')} | Mood: ${brief.mood.join(', ')} | Themes: ${brief.themes.join(', ')}`);
       if (crit) {
@@ -864,9 +1035,11 @@ function exportAsPDF({
         if (crit.suggestions?.length) addBullets(crit.suggestions);
       }
 
+      // Image attributions
       const attr = picks.map(s=> s.attribution).join('  •  ');
-      doc.setFontSize(8); doc.setTextColor(120);
-      addParagraph(attr.substring(0, 1000)); doc.setTextColor(20);
+      setH(8, false, 120);
+      addParagraph(attr.substring(0, 1200));
+      setH(10, false, 20);
 
       doc.save(`${(brief.title || 'promo').replace(/\s+/g,'_')}_promo.pdf`);
     });

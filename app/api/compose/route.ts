@@ -20,6 +20,39 @@ type CreativeBrief = {
 // Added 'pre_sale' and 'instagram'; kept 'tiktok' for backward-compat
 export type Goal = 'pre_save' | 'pre_sale' | 'press_kit' | 'tiktok' | 'instagram' | 'playlist_pitch';
 
+
+// --------- Emoji scrub utilities ---------
+let EMOJI_RE: RegExp;
+try {
+  // Modern Node supports Unicode properties
+  EMOJI_RE = new RegExp('[\\p{Emoji_Presentation}\\p{Extended_Pictographic}]', 'gu');
+} catch {
+  // Fallback for older runtimes
+  EMOJI_RE = /([\u2190-\u21FF]|[\u2300-\u23FF]|[\u2460-\u24FF]|[\u25A0-\u27BF]|[\u2B00-\u2BFF]|[\uD83C-\uDBFF][\uDC00-\uDFFF])/g;
+}
+
+function stripEmojis(s: string): string {
+  return (s || '')
+    .replace(EMOJI_RE, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanArray(arr: unknown, max = Infinity): string[] {
+  if (!Array.isArray(arr)) return [];
+  const out = arr.map(x => stripEmojis(String(x))).filter(Boolean);
+  return out.slice(0, max);
+}
+
+function cleanPlan(items: unknown): { day: string; idea: string; hook: string }[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((it: any) => ({
+    day: stripEmojis(String(it?.day || '')),
+    idea: stripEmojis(String(it?.idea || '')),
+    hook: stripEmojis(String(it?.hook || '')),
+  })).filter(p => p.day || p.idea || p.hook).slice(0, 7);
+}
+
 function hashKey(x: any) {
   return crypto.createHash('sha1').update(JSON.stringify(x)).digest('hex');
 }
@@ -76,16 +109,19 @@ export async function POST(req: NextRequest) {
     const model = 'gpt-4o-mini';
 
     const sys = [
-      'You are an expert music marketing copywriter and creative director.',
-      'Write tight, vivid copy in a modern, credible tone (no clichés).',
-      'Reflect the given title/artist/genre/mood/themes.',
-      'Use palette colors only as vibe cues; do not name hex codes.',
-      goal ? `Goal preset: ${goal} -> ${goalHint(goal)}` : '',
-      `Apply the goal preset to ALL sections: loglines, bio120, captionsA, captionsB, and plan.`,
-      `Avoid naming other platforms unless explicitly present in the brief. ${goalGuards(goal)}`,
-      refineNotes ? `Revise to address the following critique points: ${refineNotes}` : '',
-      'Return ONLY valid JSON matching the schema.',
-    ].filter(Boolean).join(' ');
+        'You are an expert music marketing copywriter and creative director.',
+        'Write tight, vivid copy in a modern, credible tone (no clichés).',
+        'Reflect the given title/artist/genre/mood/themes.',
+        'Use palette colors only as vibe cues; do not name hex codes.',
+        // NEW: absolute ban on emojis/symbols
+        'Do NOT use emojis, emoticons, decorative unicode, or ASCII art. Plain text only.',
+        'Use normal punctuation; bullet points are plain text (no emoji bullets).',
+        goal ? `Goal preset: ${goal} -> ${goalHint(goal)}` : '',
+        `Apply the goal preset to ALL sections: loglines, bio120, captionsA, captionsB, and plan.`,
+        `Avoid naming other platforms unless explicitly present in the brief. ${goalGuards(goal)}`,
+        refineNotes ? `Revise to address the following critique points: ${refineNotes}` : '',
+        'Return ONLY valid JSON matching the schema.',
+      ].filter(Boolean).join(' ');
 
     const user = {
       brief,
@@ -117,16 +153,17 @@ export async function POST(req: NextRequest) {
     try { data = JSON.parse(content); } catch {}
 
     const out = {
-      loglines: Array.isArray(data.loglines) ? data.loglines.slice(0, 6) : [],
-      bio120: typeof data.bio120 === 'string' ? data.bio120 : '',
-      captionsA: Array.isArray(data.captionsA) ? data.captionsA.slice(0, 8) : [],
-      captionsB: Array.isArray(data.captionsB) ? data.captionsB.slice(0, 8) : [],
-      plan: Array.isArray(data.plan) ? data.plan.slice(0, 7) : [],
-      model,
-      usage,
-      tookMs: Date.now() - started,
-      cache: false,
-    };
+        loglines: cleanArray(data.loglines, 6),
+        bio120: stripEmojis(typeof data.bio120 === 'string' ? data.bio120 : ''),
+        captionsA: cleanArray(data.captionsA, 8),
+        captionsB: cleanArray(data.captionsB, 8),
+        plan: cleanPlan(data.plan),
+        model,
+        usage,
+        tookMs: Date.now() - started,
+        cache: false,
+      };
+      
 
     cache.set(cacheKey, out);
     return NextResponse.json(out);
