@@ -1,11 +1,14 @@
 // app/layout.tsx
-import type { Metadata } from 'next';
 import './globals.css';
+import { Inter } from 'next/font/google';
+import type { Metadata } from 'next';
+
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'AI Promo Agent',
-  description: 'A production-style prototype for music release promotion.',
-  themeColor: '#091127', // sets meta theme-color (also used by some platforms)
+  title: 'Creative Promo Agent',
+  description: 'AI-powered promo kit generator for music releases',
+  themeColor: '#091127',
   icons: {
     icon: [
       { url: '/favicon.ico' },
@@ -13,9 +16,7 @@ export const metadata: Metadata = {
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
     ],
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
-    other: [
-      { rel: 'mask-icon', url: '/safari-pinned-tab.svg', color: '#5468ff' },
-    ],
+    other: [{ rel: 'mask-icon', url: '/safari-pinned-tab.svg', color: '#5468ff' }],
   },
   manifest: '/site.webmanifest',
 };
@@ -23,7 +24,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="app-bg">{children}</body>
+      <body className={`${inter.className} app-bg text-base text-ink antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }
