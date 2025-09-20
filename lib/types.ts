@@ -4,15 +4,18 @@ export type UserInput =
 
 
 export type CreativeBrief = {
-title: string;
-artist?: string;
-genre: string[];
-mood: string[];
-themes: string[];
-targetAudience: string;
-tone: "cinematic" | "warm" | "edgy";
-colorHints: string[];
-};
+    title: string;
+    artist: string;
+    genre: string[];
+    mood: string[];
+    themes: string[];
+    colorHints?: string[];
+  
+    // make these optional to avoid breaking older routes
+    targetAudience?: string;
+    tone?: string[]; // e.g., ['modern','credible']
+  };
+
 
 
 export type ImageRef = {
